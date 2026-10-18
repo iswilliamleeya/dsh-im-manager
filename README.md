@@ -1,8 +1,7 @@
 # dsh-im-manager
 
 > 2026-10-18：项目从 `dsh-im-gateway` 更名为 `dsh-im-manager`；npm 包名、CLI 二进制、
-> 配置/状态目录（`.dsh-im-manager`、`~/.dsh-im-manager`）一并改名。旧目录已迁移，备份在
-> `staging/rename-backup-20261018/`。
+> 配置/状态目录（`.dsh-im-manager`、`~/.dsh-im-manager`）一并改名。
 
 把 **飞书 / 钉钉 / 企业微信 / 微信（个人）** 接进 DeepSeek Harness 的 IM 网关。
 一条 IM 消息 → DSH Agent 一轮回答 → 按平台限制分片发回。
