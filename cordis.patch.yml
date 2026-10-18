@@ -1,0 +1,15 @@
+# dsh-im-manager profile bundle layer.
+#
+# Mounts the host plugin in manager mode (multi-workspace control plane + native
+# DSH GUI page). Install with `dsh plugin add <path-or-git-url>`; the bundle is
+# enabled per profile. Remove by disabling the bundle in the Plugins page.
+- insert:
+    - id: im-manager
+      name: dsh-im-manager
+      config:
+        mode: manager
+        managerFile: ""
+        host: 127.0.0.1
+        port: 8788
+        autoStart: true
+        startAllWorkspaces: false

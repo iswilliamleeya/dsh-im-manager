@@ -1,0 +1,11 @@
+node_modules/
+state/
+*.log
+.DS_Store
+smoke-*/
+.dsh-im-manager/
+coverage/
+*.tgz
+.env
+.env.*
+!.env.example

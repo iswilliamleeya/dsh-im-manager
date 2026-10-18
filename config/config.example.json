@@ -1,0 +1,119 @@
+{
+  "dsh": {
+    "command": "dsh",
+    "args": [
+      "--profile",
+      "sdk"
+    ],
+    "cwd": "~",
+    "home": "",
+    "env": {},
+    "provider": "deepseek-official",
+    "model": "deepseek-chat",
+    "reasoningEffort": "",
+    "maxTokens": null,
+    "initTimeoutMs": 60000,
+    "turnTimeoutMs": 600000,
+    "requestTimeoutMs": 60000,
+    "restart": {
+      "minDelayMs": 1000,
+      "maxDelayMs": 30000
+    }
+  },
+  "gateway": {
+    "stateDir": "~/.dsh-im-manager",
+    "concurrency": 4,
+    "log": {
+      "level": "info"
+    },
+    "http": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 8787,
+      "publicBaseUrl": ""
+    },
+    "access": {
+      "dmPolicy": "pairing",
+      "allowFrom": [],
+      "pairingTtlSec": 600,
+      "groups": {
+        "enabled": false,
+        "requireMention": true,
+        "allowFrom": []
+      }
+    },
+    "reply": {
+      "chunkChars": 1800,
+      "typing": true,
+      "format": "auto",
+      "showErrorDetail": false,
+      "emptyText": "（本轮没有文本输出）",
+      "maxChunks": 6
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "accountId": "feishu",
+      "mode": "ws",
+      "appId": "env:FEISHU_APP_ID",
+      "appSecret": "env:FEISHU_APP_SECRET",
+      "domain": "feishu",
+      "encryptKey": "",
+      "verificationToken": "",
+      "webhookPath": "/webhook/feishu",
+      "allowFrom": [],
+      "groups": {}
+    },
+    "dingtalk": {
+      "enabled": true,
+      "accountId": "dingtalk",
+      "mode": "stream",
+      "clientId": "env:DINGTALK_CLIENT_ID",
+      "clientSecret": "env:DINGTALK_CLIENT_SECRET",
+      "robotCode": "env:DINGTALK_ROBOT_CODE",
+      "webhookPath": "/webhook/dingtalk",
+      "allowFrom": [],
+      "groups": {}
+    },
+    "wecom": {
+      "enabled": true,
+      "accountId": "wecom",
+      "mode": "ws",
+      "botId": "env:WECOM_BOT_ID",
+      "secret": "env:WECOM_SECRET",
+      "token": "",
+      "encodingAESKey": "",
+      "corpId": "",
+      "agentId": "",
+      "webhookPath": "/webhook/wecom",
+      "allowFrom": [],
+      "groups": {}
+    },
+    "weixin": {
+      "enabled": false,
+      "accountId": "weixin",
+      "mode": "ilink",
+      "baseUrl": "https://ilinkai.weixin.qq.com",
+      "cdnBaseUrl": "https://novac2c.cdn.weixin.qq.com/c2c",
+      "credentialsFile": "",
+      "requestTimeoutMs": 15000,
+      "longPollTimeoutMs": 35000,
+      "reconnect": {
+        "enabled": true,
+        "baseDelayMs": 2000,
+        "maxDelayMs": 30000
+      },
+      "typing": true,
+      "botAgent": "dsh-im-manager",
+      "allowFrom": [],
+      "groups": {},
+      "media": {
+        "download": true,
+        "maxBytes": 26214400,
+        "timeoutMs": 30000,
+        "maxItemsPerMessage": 8
+      }
+    }
+  }
+}

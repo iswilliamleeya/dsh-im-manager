@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd user agent template for dsh-im-manager (macOS).
+
+  Install:
+    cp install/launchd/com.dsh.im-manager.plist ~/Library/LaunchAgents/
+    # edit the three placeholders below first
+    launchctl load -w ~/Library/LaunchAgents/com.dsh.im-manager.plist
+    launchctl log stream --predicate 'process == "node"'   # or tail the log files
+
+  Replace:
+    __NODE__          absolute path to node (>=22.19)
+    __GATEWAY_DIR__   absolute path to this dsh-im-manager checkout
+    __CONFIG__        absolute path to config.json
+    YOU               your user name
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dsh.im-manager</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__GATEWAY_DIR__/bin/dsh-im-manager.js</string>
+    <string>serve</string>
+    <string>--config</string>
+    <string>__CONFIG__</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__GATEWAY_DIR__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>DSH_IM_MANAGER_CONFIG</key>
+    <string>__CONFIG__</string>
+    <!-- Put provider and channel secrets in a 0600 env file instead of here.
+         launchd has no EnvironmentFile; source them from your shell profile or
+         wrap the command in a small shell script. -->
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/YOU/Library/Logs/dsh-im-manager/out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOU/Library/Logs/dsh-im-manager/err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

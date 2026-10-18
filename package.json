@@ -1,0 +1,79 @@
+{
+  "name": "dsh-im-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "IM channels for DeepSeek Harness: multi-workspace Feishu / DingTalk / WeCom / personal WeChat gateways driving isolated DSH SDK runtimes",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "dsh-im-manager": "bin/dsh-im-manager.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./dsh-plugin": "./src/dsh-plugin.js",
+    "./package.json": "./package.json",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "engines": {
+    "node": ">=22.19"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=spec 'test/**/*.test.js'",
+    "test:unit": "node --test --test-reporter=spec 'test/core/*.test.js' 'test/bridge/*.test.js' 'test/host/*.test.js'",
+    "test:adapters": "node --test --test-reporter=spec 'test/adapters/**/*.test.js'",
+    "test:e2e": "node --test --test-reporter=spec 'test/e2e/*.test.js'",
+    "start": "node bin/dsh-im-manager.js serve",
+    "doctor": "node bin/dsh-im-manager.js doctor",
+    "test:host": "node --test --test-reporter=spec 'test/host/*.test.js'"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5",
+    "@larksuiteoapi/node-sdk": "^1.55.0",
+    "dingtalk-stream": "^2.1.6-beta.1",
+    "fast-xml-parser": "^5.2.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.0"
+  },
+  "dsh": {
+    "plugin": {
+      "inject": [
+        "tools"
+      ]
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-session-controller"
+      ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iswilliamleeya/dsh-im-manager.git"
+  },
+  "homepage": "https://github.com/iswilliamleeya/dsh-im-manager#readme",
+  "bugs": {
+    "url": "https://github.com/iswilliamleeya/dsh-im-manager/issues"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "lib/client.js",
+    "install/",
+    "config/config.example.json",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+  }
+}
