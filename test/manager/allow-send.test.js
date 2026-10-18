@@ -224,7 +224,7 @@ describe('manager allow/send via HTTP (host plugin path)', () => {
       gatewayFactory: factory,
     });
     await manager.init();
-    const api = createManagerApi({ manager, webRoot: join(dir, 'webui'), logger: silentLogger() });
+    const api = createManagerApi({ manager, logger: silentLogger() });
     const listen = await api.start({ host: '127.0.0.1', port: 0 });
     const base = `http://127.0.0.1:${listen.port}`;
     const json = async (method, path, body) => {

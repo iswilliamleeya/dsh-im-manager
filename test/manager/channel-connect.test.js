@@ -826,7 +826,7 @@ describe('manager: channel connect begin response', () => {
       // Default qrWaitMs (1500) on purpose: this mirrors the real POST path.
     });
     await manager.init();
-    const api = createManagerApi({ manager, webRoot: join(dir, 'webui'), logger: silentLogger() });
+    const api = createManagerApi({ manager, logger: silentLogger() });
     const listen = await api.start({ host: '127.0.0.1', port: 0 });
     const base = `http://127.0.0.1:${listen.port}`;
     t.after(async () => {
@@ -879,7 +879,7 @@ describe('manager: channel connect api integration', () => {
       connectOptions: { qrWaitMs: 0 },
     });
     await manager.init();
-    const api = createManagerApi({ manager, webRoot: join(dir, 'webui'), logger: silentLogger() });
+    const api = createManagerApi({ manager, logger: silentLogger() });
     const listen = await api.start({ host: '127.0.0.1', port: 0 });
     const base = `http://127.0.0.1:${listen.port}`;
     const json = async (method, path, body) => {

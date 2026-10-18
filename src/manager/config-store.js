@@ -4,13 +4,13 @@
  * Owns two kinds of files:
  *   - `manager.json` (default `~/.dsh-im-manager/manager.json`): the list of
  *     workspaces the manager knows about, plus the loopback listen address of
- *     the Web UI. Written atomically with mode 0600.
+ *     the DSH page/manager API. Written atomically with mode 0600.
  *   - `<workspaceDir>/.dsh-im-manager/config.json`: one ordinary gateway config
  *     per workspace (same format as `docs/contracts.md`). Also 0600 + atomic.
  *
  * This module deliberately stays independent from the gateway runtime: it only
  * reads/writes configuration, generates a default config for new workspaces,
- * masks secrets for the Web UI, and validates a config before it is persisted.
+ * masks secrets for the DSH page/manager API, and validates a config before it is persisted.
  * Lifecycle (start/stop/restart) lives in `manager.js`.
  *
  * The contract is `docs/manager-contract.md` §1/§4/§5.
@@ -231,7 +231,7 @@ export function isSecretPlaceholder(value) {
 }
 
 /**
- * Mask one credential value. Empty strings stay empty so the Web UI can tell
+ * Mask one credential value. Empty strings stay empty so the DSH page/manager API can tell
  * "not configured" from "configured"; indirections are preserved verbatim.
  * @param {unknown} value
  */
@@ -243,7 +243,7 @@ export function maskSecretValue(value) {
 
 /**
  * Deep-copy a gateway config with credentials masked (contract §4).
- * The result is structurally identical to the config file, so the Web UI can
+ * The result is structurally identical to the config file, so the DSH page/manager API can
  * render it directly and send it back on save.
  *
  * @template T
@@ -734,7 +734,7 @@ export function createConfigStore(options = {}) {
     },
 
     /**
-     * Masked config for the Web UI (contract §4).
+     * Masked config for the DSH page/manager API (contract §4).
      * @param {string} id
      * @returns {Record<string, any>}
      */

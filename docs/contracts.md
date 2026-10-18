@@ -15,7 +15,7 @@ IM 平台  ──adapter──▶  InboundMessage ──gateway──▶  DSH SD
   agent/session API；只依赖 Node 内置模块、`ws`、`fast-xml-parser`、各自平台 SDK。
 - `src/bridge/`：唯一与 DSH runtime 通信的边界（spawn 子进程 + 换行分隔 JSON-RPC 2.0）。
 - `src/core/`：路由、访问控制、去重、会话映射、回复编排、HTTP 宿主、配置、日志。
-- `bin/`、`src/cli.js`：命令行入口。
+- `bin/`、`src/cli.js`：诊断命令行入口（运行入口是 DSH profile bundle）。
 
 ## 2. Adapter 契约
 

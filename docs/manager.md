@@ -1,68 +1,53 @@
-# 多工作区管理（Manager + Web UI）
+# 多工作区管理（DSH 原生页面）
 
 > 状态：v1。契约以 [manager-contract.md](manager-contract.md) 为准；本文是使用与运维视角的说明。
-> 实现：`src/manager/`（manager + HTTP API）、`src/webui/`（无构建步骤的静态 UI）。
+> 实现：`src/manager/`（manager + 本机 HTTP API）、`lib/client.js`（DSH 侧栏「消息」页面）。
+> Web UI 静态页面与独立 CLI manager 已移除。
 
 ## 1. 定位与架构
 
-`dsh-im-manager serve` 管理**一个**工作区（一份 gateway 配置、一套渠道账号、一个 DSH runtime）。
-`dsh-im-manager manager` 在它之上加一层**多工作区管理**：
+manager 内嵌在 DSH 宿主进程里，管理**多个工作区**（每个工作区一份 gateway 配置、一套渠道账号、
+一个 DSH runtime）：
 
 ```
-浏览器 ──HTTP（仅 127.0.0.1）──▶ manager 进程 (127.0.0.1:8788)
-                                   ├── workspace A：gateway → dsh runtime（渠道：飞书）
-                                   ├── workspace B：gateway → dsh runtime（渠道：钉钉）
-                                   └── workspace C：gateway → dsh runtime（渠道：微信个人）
+DSH 侧栏「消息」 ──同源 RPC /im-manager──▶ host plugin/manager
+                                             ├── workspace A：gateway → dsh runtime（飞书）
+                                             ├── workspace B：gateway → dsh runtime（钉钉）
+                                             └── workspace C：gateway → dsh runtime（微信个人）
 ```
+
+manager 的本机 HTTP API（`127.0.0.1:8788`）仍保留，用于 attach 模式与健康检查；
+它**不再提供浏览器 UI**，`GET /` 只返回服务信息。
 
 不变式（v1 不变）：
 
 - **一个工作区 = 一个 gateway 实例 = 一个 DSH SDK runtime 子进程 = 一套渠道账号**；
 - 每个工作区使用**普通 gateway 配置**（格式见 [configuration.md](configuration.md)），manager 不改变渠道字段；
 - 工作区之间相互隔离：一个工作区启动失败只标记它自己 `state=error`，不影响其它工作区；
-- `manager.json` 只记录「有哪些工作区、UI 监听在哪」，不存渠道密钥（密钥仍在各工作区配置里）。
+- `manager.json` 只记录「有哪些工作区、HTTP API 监听在哪」，不存渠道密钥（密钥仍在各工作区配置里）。
 
 manager 数据目录默认 `~/.dsh-im-manager`（可用 manager API/CLI 的 `--config` 指向别的 `manager.json`，
 但数据目录本身没有 CLI 参数，默认固定）。
 
-## 2. 快速开始
+## 2. 启用
 
 ```bash
-cd dsh-im-manager
-npm install
+# 作为 profile bundle 安装（推荐）
+dsh plugin --profile desktop add github:iswilliamleeya/dsh-im-manager
 
-# 启动 manager + Web UI（默认 127.0.0.1:8788）
-node bin/dsh-im-manager.js manager
-
-# 浏览器打开
-open http://127.0.0.1:8788/
+# 开发态：直接写 desktop profile
+bash install/activate.sh
 ```
 
-首次启动会**自动创建** `~/.dsh-im-manager/manager.json`；如果当前目录存在
-`.dsh-im-manager/config.json`，会把当前目录作为第一个工作区加入（`autoStart=false`）。
+重启 DSH 后打开左侧栏「消息」：
 
-UI 里的最短路径：
+1. 「DSH 工作区」列出当前 profile 的所有 workspace；
+2. 选中没有 Gateway 的工作区 →「创建 Gateway」（幂等 adopt，生成 `<workspace>/.dsh-im-manager/config.json`）；
+3. 渠道行里扫码/填配置启用渠道；
+4. 需要随 DSH 自动恢复时打开「自动启动」。
 
-1. 左侧「＋ 添加工作区」：填名称、工作区绝对路径、勾选要用的渠道 → 创建
-   （**所有渠道默认都是 disabled**，勾选只决定 UI 展示，不会自动启用）；
-2. 在右侧渠道卡片里启用渠道：
-   - 飞书/微信：点卡片上的「启用」→ 弹窗扫码（飞书还可切「手动填写」App ID/Secret）；
-     **关闭弹窗且未确认 = 不启用**；
-   - 钉钉/企业微信：填好密钥后点保存，即启用；
-3. 点「开始」启动这个工作区（等价于对该工作区执行 `serve`）；
-4. 用户私聊机器人后，在「配对请求」面板点对应条目的「批准」（等价 CLI `pair <code>`）；
-5. 「日志」面板看最近 200 行（已脱敏）。
-
-CLI 选项：
-
-```bash
-dsh-im-manager manager [--config <manager.json>] [--host 127.0.0.1] [--port 8788]
-```
-
-- `--config`：manager.json 路径，默认 `~/.dsh-im-manager/manager.json`；
-- `--host` / `--port`：**本次启动**覆盖监听地址（不写回 manager.json；长期修改请改 `listen`）；
-- 前台常驻；Ctrl+C / SIGTERM 会先停止所有工作区再退出；
-- `manager --help` 与全局 `help` 相同（打印完整命令用法）。
+不再有独立 CLI `manager` / `serve` / `init`；`dsh-im-manager doctor|status|pair|weixin...`
+仅作诊断与终端操作。
 
 ## 3. `manager.json`
 
@@ -87,7 +72,7 @@ dsh-im-manager manager [--config <manager.json>] [--host 127.0.0.1] [--port 8788
 | 字段 | 类型 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `version` | number | `1` | 当前只有 1 |
-| `listen.host` | string | `"127.0.0.1"` | Web UI/API 监听地址；**只建议 loopback** |
+| `listen.host` | string | `"127.0.0.1"` | manager HTTP API 监听地址；**只建议 loopback** |
 | `listen.port` | number | `8788` | 监听端口 |
 | `workspaces[].id` | string | 由名称生成 | 小写字母/数字/`-`，全局唯一；删除后同名可复用 |
 | `workspaces[].name` | string | 必填 | 显示名 |
@@ -98,62 +83,41 @@ dsh-im-manager manager [--config <manager.json>] [--host 127.0.0.1] [--port 8788
 说明：
 
 - 手工改 `manager.json` 后需要**重启 manager** 才生效（运行中不会热加载）；
-- 删除工作区（UI/API）**只从 manager.json 移除条目**，不删除配置文件、`stateDir`、微信凭据与会话，
+- 删除工作区（页面/API）**只从 manager.json 移除条目**，不删除配置文件、`stateDir`、微信凭据与会话，
   这样误删可以恢复；
 - 工作区 id 由名称 slug 化生成（如 `Demo Feishu` → `demo-feishu`），重复时自动加后缀。
 
 ## 4. 工作区配置与目录布局
 
-UI 新建工作区时会生成一份普通 gateway 配置（`0600`）：
+页面新建工作区时会生成一份普通 gateway 配置（`0600`）：
 
 | 配置项 | 生成值 |
 | --- | --- |
 | `dsh.cwd` | 工作区的 `workspaceDir` |
 | `gateway.stateDir` | `<managerDataDir>/workspaces/<id>/state`（默认 `~/.dsh-im-manager/workspaces/<id>/state`） |
-| `gateway.http.port` | `0`（随机端口，避免多个工作区抢 8788/8787；UI 详情里显示实际端口） |
-| `channels.*` | **全部 `enabled: false`**；创建时的渠道勾选只决定 UI 展示，不负责启用 |
-| 其他字段 | 取 `defaultConfig()` 默认值，之后可在 UI/配置文件中改 |
+| `gateway.http.port` | `0`（随机端口，避免多个工作区抢 8788/8787；页面详情里显示实际端口） |
+| `channels.*` | **全部 `enabled: false`**；创建时的渠道勾选只决定页面展示，不负责启用 |
+| 其他字段 | 取 `defaultConfig()` 默认值，之后可在页面/配置文件中改 |
 
 要点：
 
 - **v1.1 起新建工作区不会自动启用任何渠道**（契约 §10.1）：启用统一走渠道卡片的扫码连接
   （飞书/微信）或保存配置（钉钉/企业微信），详见 §6；
 - **manager 不改变 gateway 配置格式**：每个工作区仍是 [configuration.md](configuration.md) 描述的那份 JSON；
-  也可以继续用 `dsh-im-manager init --local`、`doctor`、`pair` 等命令按工作区操作（`cd <workspace>`）；
+  也可以继续用 `doctor`、`pair`、`sessions` 等诊断命令按工作区操作（`cd <workspace>`）；
 - 已有工作区配置（例如手工创建、带固定端口 `8787` 的配置）会**原样使用**，不会被改写成 `port=0`；
 - 多个工作区默认各自随机 HTTP 端口；webhook 渠道（飞书/钉钉/企业微信）需要把平台回调分别指向
   各工作区的实际端口（或统一反代到不同路径/域名）；
 - 渠道密钥可以继续用 `env:NAME` / `${NAME}` 占位——**在 manager 进程的环境变量里解析**，
-  所以 launchd/systemd 的 `EnvironmentVariables`/`EnvironmentFile` 要包含这些变量；
+  所以 DSH 宿主启动环境里要包含这些变量；
 - 工作区配置文件里的 `getWorkspaceConfig` 返回值会把密钥替换成 `***`（`env:`/`${}` 原样保留），
   保存时含 `***` 的字段保留旧值；
 - 一个渠道账号（尤其长连接/扫码登录类：飞书 ws、钉钉 stream、企业微信 ws、微信个人）**不要同时绑定到多个工作区**，
   否则会互相抢占长连接/互相踢下线。
 
-## 5. Web UI 使用
-
-打开 `http://127.0.0.1:8788/`（静态三件套 `index.html` + `app.js` + `style.css`，无构建步骤、无 CDN）。
-
-- **左侧栏**：manager 状态、工作区列表（状态点 running/stopped/error + 已启用渠道 chips）、添加工作区。
-- **详情头部**：名称、`workspaceDir`、`configFile`、运行状态、DSH bridge 状态、会话数、HTTP 端口、autoStart、
-  错误信息；「开始 / 停止 / 重启 / 删除工作区」。
-- **渠道配置**：飞书、钉钉、企业微信、微信（个人）四张卡片。
-  - 飞书/微信卡片显示「启用」按钮：点开扫码弹窗（飞书双 tab：**扫码创建/登录** 与 **手动填写**；
-    微信只有二维码）。扫码确认成功后才会写 `enabled:true` 并按需重启工作区；
-  - 关闭弹窗（X / Esc / 点遮罩 / 取消）且尚未确认时，会调用 cancel，**渠道保持未启用**；
-  - 钉钉/企业微信仍是「保存配置即启用」；
-  - 密钥类输入框为 `password`；已有值显示 `***` 占位，**留空表示保持原值，不回显明文**；
-  - 保存后若工作区正在运行，会**自动重启该工作区**（进行中的一轮对话会中断）；
-- **配对请求**：待配对码列表 + 批准按钮（等价 CLI `pair <code>`），刷新按钮。
-- **日志**：最近 200 行（manager 环形缓冲最多 500 行/工作区，已脱敏），刷新按钮。
-- **微信（个人）**：UI 已内嵌扫码登录弹窗（见 §6）；CLI `dsh-im-manager weixin login`
-  仍保留，适合无 UI 场景。
-- 页面每 2 秒轮询 `/api/state`；操作后立即刷新；错误在页面顶部 toast 提示。
-- 「删除工作区」会二次确认；只删 manager 条目，文件保留（见 §3）。
-
 ## 6. 渠道扫码连接（weixin / feishu）
 
-v1.1 起，`weixin` 与 `feishu` 可以在 Web UI 里通过扫码完成「连接并启用」；钉钉/企业微信仍为
+`weixin` 与 `feishu` 可以在 DSH「消息」页面里通过扫码完成「连接并启用」；钉钉/企业微信仍为
 「保存配置即启用」。核心规则：**扫码弹窗在确认前关闭 = 渠道不启用**。
 
 ### 6.1 创建的工作区默认不启用渠道
@@ -178,7 +142,7 @@ begin → pending(二维码) → scanned（已扫码等待确认）→ confirmed
 | `cancelled` | 用户关闭弹窗或显式取消 | `false` |
 
 - 每个 `workspace + channel` 同时最多一个 flow；再次 `begin` 会取消旧 flow；
-- 终止状态（confirmed/expired/failed/cancelled）保留 **10 分钟**供 UI 查询，之后可重新 begin；
+- 终止状态（confirmed/expired/failed/cancelled）保留 **10 分钟**供页面查询，之后可重新 begin；
 - 只有 `confirmed` 会写 `enabled:true` 并（运行中时）重启工作区。
 
 ### 6.3 API
@@ -235,7 +199,7 @@ begin → pending(二维码) → scanned（已扫码等待确认）→ confirmed
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/health` | `{ ok: true }`，UI 探活 |
+| GET | `/api/health` | `{ ok: true }`，探活 |
 | GET | `/api/state` | 管理器与全部工作区状态（返回前会刷新一次各工作区 status） |
 | POST | `/api/workspaces` | `{ name, workspaceDir, channels?: string[], autoStart? }`，创建并写工作区配置 |
 | PATCH | `/api/workspaces/:id` | `{ name?, autoStart? }` |
@@ -251,12 +215,12 @@ begin → pending(二维码) → scanned（已扫码等待确认）→ confirmed
 | GET | `/api/workspaces/:id/pairing` | `{ pending: [...] }` 待配对列表（`pendingPairings` 同内容） |
 | POST | `/api/workspaces/:id/pairing/approve` | `{ code }`，批准配对 |
 | GET | `/api/workspaces/:id/logs?lines=200` | `{ lines: string[] }`，最近日志（脱敏） |
-| GET | `/`、`/app.js`、`/style.css` | 静态 UI（不允许路径穿越，未知路径 404） |
+| GET | `/` | 服务信息 `{ ok, service, ui, health }`；不再提供静态页面 |
 
 - `channels` 取值：`feishu`、`dingtalk`、`wecom`、`weixin`（与 [channels/index.md](channels/index.md) 一致）。
-- `GET /api/state` 每次会触发一次工作区状态刷新，UI 2s 轮询时也承担了「保持状态新鲜」的职责。
+- `GET /api/state` 每次会触发一次工作区状态刷新；DSH 页面 2.5s 轮询 `discover` 也承担「保持状态新鲜」的职责。
 - 所有写操作在 manager 内部串行化（互斥），避免并发启动/保存竞争。
-- 静态资源只来自 `src/webui/`；`../`、符号链接逃逸、未知文件均 404。
+- 非 API 路径一律 JSON 404；没有静态资源。
 
 状态形状（`GET /api/state`）：
 
@@ -290,37 +254,35 @@ begin → pending(二维码) → scanned（已扫码等待确认）→ confirmed
 - **只监听 loopback**（默认 `127.0.0.1:8788`），**没有登录/鉴权，也没有 TLS**。
 - 不要直接暴露 8788 到公网。确需远程访问时，自行用反向代理 + 强鉴权 + TLS，并且只暴露必要路径。
 - 配置 API 返回的密钥一律 `***`；日志行经过脱敏（Bearer、query 里的 token、secret 字段等）。
-- `manager.json` 与各工作区配置都是 `0600`，原子写；UI 的错误信息也做了脱敏。
+- `manager.json` 与各工作区配置都是 `0600`，原子写；页面的错误信息也做了脱敏。
 - 「批准配对」= 把陌生人加入该工作区 allowlist，属于特权操作；不要在共享浏览器/录屏环境里操作。
 - 同一渠道账号不要跨工作区并发绑定（会互相抢占长连接）；微信个人凭据文件仍按工作区隔离。
 - 删除工作区不删磁盘文件；要彻底清理需手动删除对应 `configFile` 与 `stateDir`（含微信凭据/会话映射）。
 
-## 9. 生命周期与常驻
+## 9. 生命周期
 
-- `manager` 启动顺序：读/创建 `manager.json` → 启动 HTTP API → 启动所有 `autoStart=true` 工作区
-  （单个失败只记录 error，不阻塞其它）→ 等待 SIGINT/SIGTERM。
+- manager 由 DSH 宿主创建：启动 HTTP API → 启动所有 `autoStart=true` 工作区（单个失败只记录 error，
+  不阻塞其它）→ DSH 退出/卸载插件时停止全部工作区并关闭 API。
 - 工作区状态：`stopped | starting | running | stopping | error`；失败原因在 `error` 与日志里。
 - `start/stop/restart` 幂等；`PUT config` 保存后若该工作区在运行会自动重启它。
-- manager 退出：停止所有工作区（gateway 优雅关闭 bridge）→ 关闭 API。
-- manager 重启后**只有 `autoStart=true` 的工作区会自动启动**；其余保持 stopped，可在 UI 点开始。
-- launchd/systemd 常驻示例见 [operations.md](operations.md) §4.1；升级/重启语义见 §7；
-  作为 DSH 宿主插件运行时，生命周期由 DSH 宿主管理（见 §10）。
+- manager 重启后**只有 `autoStart=true` 的工作区会自动启动**；其余保持 stopped，可在页面点开始。
+- 单实例锁 `~/.dsh-im-manager/manager.lock`：已有 live manager 时插件 attach 到它的 HTTP API，
+  不重复启动、不抢渠道；只有 owner 负责停止。
 
 ## 10. 作为 DSH 宿主插件（mode=manager）
 
-v1.1 起，manager 可以作为 **DSH host plugin** 加载：DSH 启动时在宿主进程内创建 manager
-（HTTP API + Web UI）并启动工作区；DSH 退出/卸载插件时停止。它与独立 CLI manager 使用**同一份
-manager.json 与同一把单实例锁**，因此两种方式可以互相 attach，但同一时刻只有一个 owner。
+manager 作为 **DSH host plugin** 加载：DSH 启动时在宿主进程内创建 manager（本机 HTTP API）
+并启动工作区；DSH 退出/卸载插件时停止。没有独立 CLI manager 进程。
 
-### 10.1 两种运行形态
+### 10.1 运行形态
 
-| | 独立 CLI manager | DSH host plugin（mode=manager） |
-| --- | --- | --- |
-| 启动方式 | `dsh-im-manager manager`（launchd/systemd 常驻） | `bash install/activate.sh` 装进 profile，随 DSH 启动 |
-| 生命周期 | 进程常驻，与 DSH 无关 | 随 DSH 宿主 apply/dispose |
-| 适合 | 开机常驻、无头服务器、长期在线 | 桌面/DSH 打开时才需要 IM，不额外守一个进程 |
-| 锁/attach | 写 `manager.lock`；第二个 CLI 会提示已在运行 | 先查锁：live 则 attach，否则 owned |
-| 日志 | 自己的 stderr（launchd/journal） | DSH 宿主日志（`im-manager/*` scope） |
+| | DSH host plugin（mode=manager） |
+| --- | --- |
+| 启动方式 | `dsh plugin add ...` 或 `bash install/activate.sh`，随 DSH 启动 |
+| 生命周期 | 随 DSH 宿主 apply/dispose |
+| 适合 | 桌面 / DSH 打开时接收 IM |
+| 锁/attach | 先查 `manager.lock`：live 则 attach，否则 owned |
+| 日志 | DSH 宿主日志（`im-manager/*` scope） |
 
 ### 10.2 插件配置（profile patch row）
 
@@ -342,9 +304,9 @@ manager.json 与同一把单实例锁**，因此两种方式可以互相 attach�
 | `mode` | `gateway` | `manager`（多工作区）或 `gateway`（旧的单工作区模式）；未知值回退 gateway 并 warn |
 | `configFile` | `""` | 仅 `gateway` 模式：单工作区配置路径；空 = 走配置查找顺序 |
 | `managerFile` | `""` | manager 模式：manager.json 路径；空 = `~/.dsh-im-manager/manager.json` |
-| `host` | `"127.0.0.1"` | manager HTTP API/UI 监听地址（建议只 loopback） |
+| `host` | `"127.0.0.1"` | manager HTTP API 监听地址（建议只 loopback） |
 | `port` | `8788` | manager HTTP 端口 |
-| `autoStart` | `true` | 插件挂载时是否启动 manager（false 时首次调用工具/UI 才惰性启动） |
+| `autoStart` | `true` | 插件挂载时是否启动 manager（false 时首次调用工具/页面才惰性启动） |
 | `startAllWorkspaces` | `false` | true 时 manager 启动后把所有已配置工作区都拉起（否则只起 `autoStart` 工作区） |
 
 `install/activate.sh` 默认写上面这行（manager 模式）；`--gateway` 写旧的单工作区行；
@@ -397,7 +359,7 @@ DSH 卸载/退出
 
 | 工具 | manager 模式行为 |
 | --- | --- |
-| `im_gateway_status` | 聚合所有工作区状态/渠道健康/待配对/Web UI URL |
+| `im_gateway_status` | 聚合所有工作区状态/渠道健康/待配对/manager HTTP 地址 |
 | `im_gateway_pair` | 批准某个工作区的配对码；可选 `workspace` |
 | `im_gateway_allow` | 直接把 sender 加进某工作区 allowlist；可选 `workspace` |
 | `im_gateway_send` | 通过某工作区的运行中渠道主动发消息；可选 `workspace` |
@@ -406,22 +368,12 @@ DSH 卸载/退出
 工作区则自动选它；没有 running 但只有一个工作区也自动选；多个 running 时必须传，否则报错
 （避免把消息发错工作区）。工具通过本地 HTTP 调用 manager，所以 attach/owned 行为一致。
 
-### 10.6 与 launchd/systemd 的差异
-
-| 关注点 | host plugin（DSH 生命周期） | launchd/systemd（CLI manager） |
-| --- | --- | --- |
-| 何时运行 | DSH 打开/加载 profile 时 | 开机/登录即常驻 |
-| 崩溃恢复 | 由 DSH 宿主重启/重载决定 | `KeepAlive`/`Restart=` 决定 |
-| 升级 | 重新 `activate.sh` 复制包，patch watcher 触发热重载 | 停服务 → 更新 → 启动 |
-| 热重载影响 | **会 dispose 正在运行的 manager/工作区，造成短暂中断** | 不影响（除非手动重启） |
-| 适用 | 桌面、本机交互 | 服务器、长期无人值守 |
-
 ### 10.7 排障
 
 | 现象 | 可能原因 | 处理 |
 | --- | --- | --- |
 | 插件日志 `manager mode is disabled inside a DSH SDK runtime` | 装到了 sdk profile / 在 SDK runtime 里加载 | 只装 desktop/web；`activate.sh --remove` 后改 profile 重装 |
-| 插件启动但 UI 打不开 | manager 未启动（autoStart=false 且没调用工具）、端口冲突 | 看 DSH 宿主日志 `im-manager/manager`；`curl 127.0.0.1:8788/api/health` |
+| 插件启动但页面无数据/API 不可用 | manager 未启动（autoStart=false 且没调用工具）、端口冲突 | 看 DSH 宿主日志 `im-manager/manager`；`curl 127.0.0.1:8788/api/health` |
 | 端口被非 manager 进程占用 | 8788 被其它服务占用 | 停掉占用进程，或 `DSH_IM_MANAGER_PORT` 换端口并重装 patch row |
 | 锁 stale（上次宿主崩溃） | `manager.lock` 里 PID 已死 | 下次启动自动清理；确认没有 manager 在跑时可手动删除 lock |
 | 两个宿主/CLI 同时启动 | 一个 owned，其余 attach | 正常；但只有 owner 负责停止，dispose owner 会让 attach 方断开 |
@@ -441,8 +393,7 @@ DSH 卸载/退出
 
 | 现象 | 可能原因 | 处理 |
 | --- | --- | --- |
-| `EADDRINUSE` / UI 打不开 | 8788 被占用 | `--port` 临时换端口，或改 `manager.json` 的 `listen.port`；`lsof -nP -iTCP:8788` 找占用进程 |
-| UI 打开空白/一直「正在连接 manager…」 | manager 没在跑、端口不对、被防火墙拦 | `curl http://127.0.0.1:8788/api/health` 应先返回 `{"ok":true}` |
+| `EADDRINUSE` / API 不可用 | 8788 被占用 | 改 `manager.json` 的 `listen.port` 后重启 DSH；`lsof -nP -iTCP:8788` 找占用进程 |
 | 工作区 `state=error` | 配置无效、渠道鉴权失败、`dsh` 不可用、端口冲突 | 看详情里的 error + 日志；对该工作区执行 `dsh-im-manager doctor --config <configFile>`；修好后重启 |
 | 工作区起不来但配置看起来没问题 | 固定端口被占（手工配置的 `http.port` 不是 0）、同一渠道账号已被另一个工作区占用 | 改端口 / 停掉另一个工作区 / 换账号 |
 | 「配对请求」为空 | 工作区未运行、没有新用户触发配对、或已批准 | 先确认工作区 running；让用户再发一条消息；刷新 |
@@ -455,7 +406,7 @@ DSH 卸载/退出
 | 修改 `manager.json` 不生效 | 运行中不热加载 | 重启 manager |
 | 删除工作区后文件还在 | 设计如此（不删配置/凭据/会话） | 确认不再需要后手动删除 `configFile` 与 `stateDir` |
 | 两个工作区同一渠道频繁掉线 | 同一账号长连接互相抢占（飞书 ws / 钉钉 stream / 企微 ws / 微信个人） | 每个工作区用独立账号；或只在一个工作区启用该渠道 |
-| API 404 | 方法/路径不匹配 | 对照 §6 表格；静态资源只暴露 `/`、`/app.js`、`/style.css` |
+| API 404 | 方法/路径不匹配 | 对照 §7 表格；`GET /` 只返回服务信息 |
 
 ## 12. 限制（v1）
 
@@ -472,9 +423,9 @@ DSH 卸载/退出
 
 ## 13. 相关文档
 
-- [manager-contract.md](manager-contract.md)：manager/API/UI 的冻结契约（开发者）
+- [manager-contract.md](manager-contract.md)：manager/API 的冻结契约（开发者）
 - [configuration.md](configuration.md)：单工作区 gateway 配置字段（manager 不改格式）
-- [operations.md](operations.md)：常驻、升级、排障
+- [operations.md](operations.md)：日志、升级、排障
 - [security.md](security.md)：渠道/密钥/访问控制安全
 - [verification.md](verification.md)：测试与验证记录
 
@@ -485,8 +436,8 @@ DSH 卸载/退出
 ```json
 "exports": { "./client": "./lib/client.js" },
 "dsh": { "client": { "platform": "web", "inject": [
-  "@deepseek-ai/dsh-client-ui-settings",
-  "@deepseek-ai/dsh-client-connection"
+  "@deepseek-ai/dsh-client-connection",
+  "@deepseek-ai/dsh-api-session-controller"
 ] } }
 ```
 
@@ -501,11 +452,11 @@ iframe，也不硬编码 8788：
 - host 半边在 manager 模式下通过 `ctx.inject(['webServer','connection'])` 注册同源前缀路由
   `/im-manager`，handler 先走 `connection.admit(req)` 的 owner 门禁，再分发 JSON 端点；
 - owned 模式直接调 manager 对象，attach 模式用 `manager-client` 的 HTTP adapter；
-- 端点：`state`、`workspace.{add,update,start,stop,restart,remove}`、`config.{get,save}`、
+- 端点：`discover`、`state`、`workspace.{add,adopt,update,start,stop,restart,remove}`、`config.{get,save}`、
   `pairing.{list,approve,allow}`、`connect.{begin,get,cancel}`、`logs`、`message.send`；
 - client 通过 `ctx.connection.rpc.call('/im-manager', endpoint, payload)` 访问，失败返回
   `{ok:false,error:{code,message,details}}`；
-- Web UI 8788 仍保留（高级渠道字段、完整页面），与 DSH 原生页面共用同一个 manager 实例。
+- 本机 HTTP API 8788 仅用于 attach/健康检查，不再提供浏览器页面。
 
 ### 10.7 DSH 工作区发现与按需 Gateway（D-v2.5）
 
@@ -519,8 +470,7 @@ iframe，也不硬编码 8788：
   企微（webhookPath/wsUrl）字段；密钥继续脱敏，`***` 留空保留。
 
 限制/后续：D-v2 原生页面覆盖工作区生命周期、飞书/微信扫码启用、飞书手动凭据、配对/allowlist、
-日志；钉钉/企微的完整字段编辑仍在 manager Web UI。iframe 已移除；下一步可以补齐全部渠道表单、
-事件订阅引导与二维码登录的更多状态。
+日志，以及飞书/钉钉/企微的完整字段编辑。下一步是事件订阅引导与二维码登录的更多状态。
 
 ### 10.6 IM 会话同步到 DSH 侧栏（D-v2.2）
 

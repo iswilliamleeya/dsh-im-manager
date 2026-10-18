@@ -54,7 +54,7 @@
 export WECOM_BOT_ID='bot-xxxxxxxx'
 export WECOM_SECRET='secret-xxxxxxxx'
 dsh-im-manager doctor     # 检查配置
-dsh-im-manager serve      # 启动，日志出现 ws authenticated 即成功
+# 在 DSH「消息」里创建/启动该工作区的 Gateway；日志出现 ws authenticated 即成功
 ```
 
 ### 2.1 字段说明
@@ -255,8 +255,7 @@ node --test 'test/adapters/wecom/*.test.js'
 # 配置检查（逐渠道报告缺失/非法字段，不会打印密钥值）
 dsh-im-manager doctor
 
-# 启动
-dsh-im-manager serve
+# 启动：在 DSH「消息」里创建/启动该工作区的 Gateway
 ```
 
 测试覆盖：sha1 签名固定向量、AES 加解密 roundtrip（含 receiveId 校验失败、错误密钥）、

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
@@ -7,13 +6,11 @@ import { createManagerApi } from '../../src/manager/api.js';
 import {
   createFakeManager,
   createFakeGatewayFactory,
-  rawRequest,
   removeDir,
   request,
   setupApi,
   silentLogger,
   tempDir,
-  writeWebRoot,
 } from './helpers.js';
 
 const MASKED = {
@@ -536,78 +533,19 @@ describe('api: routing errors', () => {
   });
 });
 
-describe('api: static web UI', () => {
-  it('serves / (index.html) with HTML content type', async (t) => {
+describe('api: root', () => {
+  it('GET / describes the service and points at the DSH UI', async (t) => {
     const { base } = await setupApi(t);
     const response = await request(base, 'GET', '/');
     assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-type') ?? '', /text\/html/);
-    assert.match(response.text, /id="app"/);
+    assert.match(response.headers.get('content-type') ?? '', /application\/json/);
+    assert.equal(response.json.service, 'dsh-im-manager');
+    assert.match(response.json.ui, /DSH/);
   });
 
-  it('serves the JS and CSS assets with correct content types', async (t) => {
+  it('returns JSON 404 for unknown non-API paths', async (t) => {
     const { base } = await setupApi(t);
-    const js = await request(base, 'GET', '/app.js');
-    assert.equal(js.status, 200);
-    assert.match(js.headers.get('content-type') ?? '', /text\/javascript/);
-    assert.match(js.text, /export const answer/);
-    const css = await request(base, 'GET', '/style.css');
-    assert.equal(css.status, 200);
-    assert.match(css.headers.get('content-type') ?? '', /text\/css/);
-    assert.match(css.text, /color/);
-  });
-
-  it('serves index.html directly and ignores query strings', async (t) => {
-    const { base } = await setupApi(t);
-    assert.equal((await request(base, 'GET', '/index.html')).status, 200);
-    assert.equal((await request(base, 'GET', '/app.js?v=2')).status, 200);
-  });
-
-  it('supports HEAD for static assets', async (t) => {
-    const { base } = await setupApi(t);
-    const response = await fetch(`${base}/style.css`, { method: 'HEAD' });
-    assert.equal(response.status, 200);
-    assert.match(response.headers.get('content-type') ?? '', /text\/css/);
-    assert.equal(await response.text(), '');
-  });
-
-  it('returns 404 for unknown static files', async (t) => {
-    const { base } = await setupApi(t);
-    const response = await request(base, 'GET', '/missing.js');
-    assert.equal(response.status, 404);
-    assert.equal(typeof response.json.error.message, 'string');
-  });
-
-  it('rejects path traversal attempts', async (t) => {
-    const { base, listen, dir } = await setupApi(t);
-    // Put a sentinel outside the web root that traversal must never reach.
-    writeFileSync(join(dir, 'secret.txt'), 'TOP-SECRET-OUTSIDE-WEBROOT');
-    for (const rawPath of [
-      '/%2e%2e%2fsecret.txt',
-      '/%2e%2e/%2e%2e/etc/passwd',
-      '/..%2f..%2fsecret.txt',
-      '/%2e%2e%2f%2e%2e%2fsecret.txt',
-    ]) {
-      const response = await rawRequest(listen.port, rawPath);
-      assert.equal(response.status, 404, `expected 404 for ${rawPath}`);
-      assert.equal(response.text.includes('TOP-SECRET-OUTSIDE-WEBROOT'), false);
-      assert.equal(response.text.includes('root:'), false);
-    }
-  });
-
-  it('returns 404 for every static route when the web root is missing', async (t) => {
-    const dir = tempDir('manager-api-noweb');
-    const api = createManagerApi({
-      manager: createFakeManager(),
-      webRoot: join(dir, 'does-not-exist'),
-      logger: silentLogger(),
-    });
-    const listen = await api.start({ host: '127.0.0.1', port: 0 });
-    t.after(async () => {
-      await api.stop().catch(() => {});
-      removeDir(dir);
-    });
-    const response = await request(`http://127.0.0.1:${listen.port}`, 'GET', '/');
+    const response = await request(base, 'GET', '/app.js');
     assert.equal(response.status, 404);
     assert.equal(typeof response.json.error.message, 'string');
   });
@@ -616,7 +554,7 @@ describe('api: static web UI', () => {
 describe('api: lifecycle', () => {
   it('start() returns the actual port, is idempotent, and exposes listen/server', async (t) => {
     const dir = tempDir('manager-api-lifecycle');
-    const api = createManagerApi({ manager: createFakeManager(), webRoot: writeWebRoot(dir), logger: silentLogger() });
+    const api = createManagerApi({ manager: createFakeManager(), logger: silentLogger() });
     t.after(async () => {
       await api.stop().catch(() => {});
       await api.stop().catch(() => {});
@@ -639,7 +577,7 @@ describe('api: lifecycle', () => {
     const dir = tempDir('manager-api-default-listen');
     const manager = createFakeManager();
     manager.listen = { host: '127.0.0.1', port: 0 };
-    const api = createManagerApi({ manager, webRoot: writeWebRoot(dir), logger: silentLogger() });
+    const api = createManagerApi({ manager, logger: silentLogger() });
     t.after(async () => {
       await api.stop().catch(() => {});
       removeDir(dir);
@@ -651,7 +589,7 @@ describe('api: lifecycle', () => {
 
   it('rejects an invalid port', async (t) => {
     const dir = tempDir('manager-api-port');
-    const api = createManagerApi({ manager: createFakeManager(), webRoot: writeWebRoot(dir), logger: silentLogger() });
+    const api = createManagerApi({ manager: createFakeManager(), logger: silentLogger() });
     t.after(() => removeDir(dir));
     await assert.rejects(api.start({ host: '127.0.0.1', port: 70000 }), /invalid port/);
   });
@@ -661,7 +599,6 @@ describe('api + real manager integration', () => {
   it('manages a full workspace through HTTP with a fake gateway factory', async (t) => {
     const { createManager } = await import('../../src/manager/manager.js');
     const dir = tempDir('manager-api-integration');
-    const webRoot = writeWebRoot(dir);
     const factory = createFakeGatewayFactory({ health: { weixin: 'disconnected' } });
     const manager = createManager({
       managerFile: join(dir, 'manager.json'),
@@ -670,7 +607,7 @@ describe('api + real manager integration', () => {
       gatewayFactory: factory,
     });
     await manager.init();
-    const api = createManagerApi({ manager, webRoot, logger: silentLogger() });
+    const api = createManagerApi({ manager, logger: silentLogger() });
     const listen = await api.start({ host: '127.0.0.1', port: 0 });
     const base = `http://127.0.0.1:${listen.port}`;
     t.after(async () => {

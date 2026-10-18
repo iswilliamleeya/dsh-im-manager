@@ -71,7 +71,7 @@
 - 所有平台密钥（`appSecret`、`clientSecret`、`token`、`encodingAESKey`、`secret` 等）
   推荐写成 `env:NAME`（运行时从环境变量解析），或 `${NAME}`（配置加载时插值）。
   配置文件本身不应出现明文密钥。
-- 环境变量来源：launchd plist / systemd `Environment=` / `.env` 仅由启动脚本 source；
+- 环境变量来源：DSH 宿主启动环境 / shell 配置 / `.env`；
   不要把密钥写进 shell 历史、README、issue。
 - 配置文件建议 `chmod 600`；`stateDir` 同样是敏感目录（含会话映射、运行状态）。
 - adapter 与 core **不得把密钥/token 写入日志**；bridge stderr 中的平台 SDK 日志也要脱敏。

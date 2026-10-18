@@ -64,14 +64,14 @@ HTTP 端口暴露给平台，请先读 [security.md](../security.md) §5。
 1. 在飞书开放平台创建企业自建应用，开启机器人能力，拿到 `appId` / `appSecret`；
 2. 配置 `channels.feishu.enabled=true`、`mode=ws` 与密钥（用 `env:` 占位）；
 3. `dsh-im-manager doctor` 检查配置与依赖；
-4. `dsh-im-manager serve` 启动，后台日志出现渠道连接成功；
+4. 在 DSH「消息」里创建/启动该工作区的 Gateway，日志出现渠道连接成功；
 5. 在飞书里私聊机器人发 `/id`，把返回的发送者 id 填进 `access.allowFrom`（或关闭 pairing）。
 
 ### 微信（个人）最短路径
 
 1. 配置 `channels.weixin.enabled=true`（其余用默认值即可，无需公网）；
 2. `dsh-im-manager weixin login`，用微信扫描终端二维码；
-3. 凭据写入后 `dsh-im-manager serve`（或已在运行的网关自动使用新凭据）；
+3. 凭据写入后，已在运行的 Gateway 会自动使用新凭据（或在 DSH「消息」里启动 Gateway）；
 4. `dsh-im-manager weixin status` 查看登录状态；掉线/`-14` 时重新 login。
 
 其他渠道的权限申请、事件订阅、加解密配置见各自文档。

@@ -234,7 +234,7 @@ export function redactCredential(credential) {
 /**
  * Cheap change-detection signature for the credential file (`mtimeMs:size`).
  * Returns `''` when the file does not exist. The adapter polls this every few
- * seconds so a QR login performed while `serve` is running is picked up
+ * seconds so a QR login performed while the gateway is running is picked up
  * automatically.
  *
  * @param {string} file absolute path

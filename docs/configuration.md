@@ -9,7 +9,7 @@
 
 1. 命令行 `--config <path>`；
 2. 环境变量 `DSH_IM_MANAGER_CONFIG`；
-3. **工作区本地配置**：当前目录下的 `.dsh-im-manager/config.json`（`dsh-im-manager init --local` 生成）；
+3. **工作区本地配置**：当前目录下的 `.dsh-im-manager/config.json`（由 DSH「消息」创建 Gateway 时生成）；
 4. `$DSH_HOME/im-manager/config.json`（`DSH_HOME` 未设置时为 `~/.dsh`）；
 5. 当前工作目录下的 `config/config.json`（仓库内旧约定）。
 
@@ -23,7 +23,7 @@
 
 ```bash
 cd <workspace>
-dsh-im-manager init --local          # 写入 <workspace>/.dsh-im-manager/config.json
+# 在 DSH 侧栏「消息」里创建 Gateway 会写入 <workspace>/.dsh-im-manager/config.json
 ```
 
 机器级安装可以复制成 `~/.dsh/im-manager/config.json`：
@@ -204,8 +204,8 @@ cp config/config.example.json ~/.dsh/im-manager/config.json
 
 ## 8. 多工作区：`manager.json`（与 gateway 配置分开）
 
-`dsh-im-manager manager` 使用一个**独立的** `manager.json`（默认 `~/.dsh-im-manager/manager.json`），
-只记录工作区列表与 Web UI 监听地址：
+manager 使用一个**独立的** `manager.json`（默认 `~/.dsh-im-manager/manager.json`），
+只记录工作区列表与 HTTP API 监听地址：
 
 ```json
 {
@@ -229,9 +229,9 @@ cp config/config.example.json ~/.dsh/im-manager/config.json
   `gateway.http.port=0`；**v1.1 起所有渠道都写成 `enabled:false`**，创建时的渠道勾选只决定 UI 展示，
   启用走渠道卡片的扫码连接（飞书/微信）或保存配置（钉钉/企业微信），见 [manager.md](manager.md) §6；
   已有工作区配置原样使用；
-- 配置中的 `env:NAME` / `${NAME}` 在 **manager 进程的环境变量**里解析（launchd/systemd 的
+- 配置中的 `env:NAME` / `${NAME}` 在 **DSH 宿主进程的环境变量**里解析（
   EnvironmentVariables/EnvironmentFile 要包含这些变量）；
-- Web UI/API 返回的配置会把密钥脱敏成 `***`；`PUT /api/workspaces/:id/config` 里含 `***` 的字段
+- manager API 返回的配置会把密钥脱敏成 `***`；`PUT /api/workspaces/:id/config` 里含 `***` 的字段
   保留原值，校验通过后原子写回，运行中的工作区会自动重启；
 - 工作区状态目录（`gateway.stateDir`）默认不在工作区内，而在 `~/.dsh-im-manager/workspaces/<id>/state`，
   这样多个工作区不会互相覆盖 `sessions.json`/`gateway.json`；

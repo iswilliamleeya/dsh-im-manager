@@ -10,7 +10,7 @@ dsh-im-manager 是一个**独立进程**的 IM 网关：把飞书 / 钉钉 / 企
 
 - 一个 gateway 进程只管理**一个 DSH runtime 子进程**（`dsh --profile sdk`），多个渠道共享它。
 - 每个渠道一个账号实例；`accountId` 字段已预留，v1 不做同渠道多账号。
-- gateway 可独立运行（`dsh-im-manager serve`），也可作为 DSH 插件加载（`src/dsh-plugin.js`）。
+- gateway 由 DSH profile bundle 启动（`src/dsh-plugin.js`），每个工作区一个 gateway + 独立 SDK runtime。
 
 ## 2. 分层
 
@@ -50,7 +50,7 @@ dsh-im-manager 是一个**独立进程**的 IM 网关：把飞书 / 钉钉 / 企
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-`bin/` 与 `src/cli.js` 只做命令行入口（`serve` / `doctor` / `status` / `pair` /
+`bin/` 与 `src/cli.js` 只做诊断/终端入口（`doctor` / `status` / `pair` /
 `weixin login|status|logout`），不承载业务逻辑。
 
 各渠道传输方式：

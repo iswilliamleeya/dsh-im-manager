@@ -89,9 +89,9 @@ webhook 模式：
 | `markdownAsCard` | boolean | `true` | Markdown 用卡片发送；`false` 时一律发纯文本（别名 `sendMarkdownAsCard`） |
 | `replyInThread` | boolean | `false` | 目标带 `threadId` 时是否用 `reply_in_thread` 回复到话题中 |
 
-### 2.2 通过 manager Web UI 扫码连接（v1.1）
+### 2.2 通过 DSH「消息」页扫码连接
 
-如果使用 `dsh-im-manager manager` 的多工作区 Web UI，可以不走上面的手工建应用流程：
+在 DSH 侧栏「消息」的工作区详情里，可以不走上面的手工建应用流程：
 
 1. 新建工作区后，飞书渠道默认是 `enabled:false`；
 2. 在飞书卡片点「启用」，弹窗有两个 tab：
@@ -228,8 +228,7 @@ node --test 'test/adapters/feishu/*.test.js'
 # 配置检查（会报告缺失/非法字段）
 dsh-im-manager doctor
 
-# 启动
-dsh-im-manager serve
+# 启动：在 DSH「消息」里创建/启动该工作区的 Gateway
 ```
 
 测试覆盖：DM 文本、群 @ / 未 @ / @ 他人、图片与文件消息、富文本、机器人自身消息过滤、

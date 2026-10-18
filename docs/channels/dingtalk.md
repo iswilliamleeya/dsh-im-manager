@@ -177,8 +177,8 @@ SDK **不会自动 ACK** 回调：handler 同步调用
 
 ```bash
 export DINGTALK_CLIENT_ID=...  DINGTALK_CLIENT_SECRET=...
-dsh-im-manager doctor --config ~/.dsh/im-manager/config.json
-dsh-im-manager serve  --config ~/.dsh/im-manager/config.json
+dsh-im-manager doctor --config <workspace>/.dsh-im-manager/config.json
+# 然后在 DSH「消息」里创建/启动该工作区的 Gateway
 ```
 
 在钉钉里私聊机器人发一条消息，或在群里 @机器人 提问即可；`/status`、`/new`、`/id`

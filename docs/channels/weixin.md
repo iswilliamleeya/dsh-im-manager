@@ -124,10 +124,10 @@ https://weixin.qq.com/x/xxxxx
 请输入手机微信显示的数字验证码：123456
 已提交验证码，继续等待确认…
 登录成功：xxxxx@im.bot（微信用户 xxxx@im.wechat）
-凭据已写入；`dsh-im-manager serve` 常驻进程会在数秒内自动开始收发消息。
+凭据已写入；运行中的 Gateway 会在数秒内自动开始收发消息。
 ```
 
-- 需要 `channels.weixin.enabled=true` 才会被 `serve` 启动；`enabled=false` 时登录仍会成功，但不会收发。
+- 需要 `channels.weixin.enabled=true` 才会被 Gateway 启动；`enabled=false` 时登录仍会成功，但不会收发。
 - 二维码内容只交给 CLI 渲染（adapter 不 import `qrcode-terminal`，也不打印 token）。
 - 扫码后如果手机端要 **数字验证码**，在终端输入；连续输错会被服务端短暂封禁
   （`verify_code_blocked`），adapter 会刷新二维码让你重试。
@@ -161,9 +161,9 @@ dsh-im-manager weixin logout
 
 ---
 
-### 2.5 通过 manager Web UI 扫码连接（v1.1）
+### 2.5 通过 DSH「消息」页扫码连接
 
-使用 `dsh-im-manager manager` 的 Web UI 时，微信渠道也支持在页面里扫码：
+在 DSH 侧栏「消息」的工作区详情里，微信渠道也支持扫码：
 
 1. 新建工作区后，微信渠道默认是 `enabled:false`；
 2. 微信卡片点「启用」→ 弹窗**只显示二维码**（没有手动模式）；

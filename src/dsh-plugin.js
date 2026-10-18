@@ -4,7 +4,7 @@
  * Mount this package in a DSH profile to start the gateway inside the harness
  * process and expose two management tools to the model. The gateway itself is
  * the same object used by the standalone CLI; the DSH SDK runtime is spawned as
- * a child process, exactly as in `dsh-im-manager serve`.
+ * a child process, one per workspace/gateway.
  *
  * This module is only imported by the DSH loader (it imports in-box packages),
  * not by the standalone CLI.
@@ -28,7 +28,7 @@ export const inject = ['tools'];
 export const Config = z.object({
   /**
    * `gateway`: start one gateway from `configFile` (legacy single-workspace mode).
-   * `manager`: embed the multi-workspace manager + its Web UI/API in this host
+   * `manager`: embed the multi-workspace manager + its local HTTP API in this host
    * process (attaches to an already-running manager when the lock is held).
    */
   mode: z.string().default('gateway'),
@@ -38,7 +38,7 @@ export const Config = z.object({
   managerFile: z.string().default(''),
   /** Manager-mode API host (loopback by default). */
   host: z.string().default('127.0.0.1'),
-  /** Manager-mode API/Web UI port. */
+  /** Manager-mode local HTTP API port. */
   port: z.number().default(8788),
   /** Start the gateway/manager when the plugin mounts. */
   autoStart: z.boolean().default(true),
@@ -306,7 +306,7 @@ async function applyGateway(ctx, config) {
 /**
  * Manager mode: embed the multi-workspace manager in the DSH host process.
  *
- * The manager owns the gateway instances (one per workspace), serves the Web UI
+ * The manager owns the gateway instances (one per workspace), serves the local API
  * and JSON API, and is guarded by `manager.lock` so a standalone CLI manager and
  * this plugin never run two copies against the same channel accounts. When the
  * lock is held the plugin attaches to the running manager and its tools use the
@@ -506,7 +506,7 @@ async function applyManager(ctx, config) {
 
   ctx.tools.register(defineTool({
     name: 'im_gateway_status',
-    description: 'Report every workspace in the embedded IM manager: state, bridge, channel health, sessions, pending pairings, and the manager Web UI URL. Use it before sending proactive messages or when a user reports a bot is offline.',
+    description: 'Report every workspace in the embedded IM manager: state, bridge, channel health, sessions, pending pairings, and the manager HTTP API address. Use it before sending proactive messages or when a user reports a bot is offline.',
     parameters: {},
     output: {
       schema: {

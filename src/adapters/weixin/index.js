@@ -365,7 +365,7 @@ export function createWeixinAdapter(deps = {}) {
       ctx.signal.addEventListener('abort', state.onAbort, { once: true });
     }
 
-    // Credential watcher: a QR login can happen at any time while serve runs.
+    // Credential watcher: a QR login can happen at any time while the gateway runs.
     const interval = positiveInt(deps.credentialsCheckIntervalMs, positiveInt(state.config.credentialsCheckIntervalMs, checkIntervalMs));
     state.watcher = setInterval(() => {
       void checkCredential(state);

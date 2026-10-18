@@ -39,7 +39,7 @@ const LOG_LEVELS = { debug: 10, info: 20, warn: 30, error: 40, silent: 100 };
 
 /**
  * Recursively redact a log payload (mirrors the core logger's structural
- * redaction so captured lines are safe to render in the Web UI).
+ * redaction so captured lines are safe to render in the DSH page).
  * @param {unknown} value
  * @param {number} depth
  * @returns {unknown}
@@ -969,7 +969,7 @@ export function createManager(options = {}) {
     },
 
     /**
-     * Masked config for the Web UI (§4).
+     * Masked config for the DSH page/manager API (§4).
      * @param {string} id
      */
     getWorkspaceConfig(id) {
@@ -1129,7 +1129,7 @@ export function createManager(options = {}) {
       return ensureLogBuffer(String(id)).toArray().slice(-count);
     },
 
-    /** Configured loopback listen address for the Web UI. */
+    /** Configured loopback listen address for the manager HTTP API. */
     get listen() {
       if (store === null) return { ...DEFAULT_LISTEN };
       return store.getListen();

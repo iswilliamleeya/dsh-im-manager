@@ -4,7 +4,7 @@
  * `ctx.config` is the merged `channels.wecom` object from core (defaults
  * applied, `env:`/`${ENV}` already interpolated). This module never logs
  * secret values and turns missing credentials into a startup error so
- * `doctor`/`serve` report them per channel.
+ * `doctor` reports them per channel.
  */
 import { decodeEncodingAESKey } from './crypto.js';
 import { DEFAULT_WECOM_API_BASE_URL } from './api.js';

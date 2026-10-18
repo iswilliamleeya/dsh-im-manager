@@ -510,35 +510,22 @@ export function createFakeManager(options = {}) {
  * Write a minimal static UI into `<dir>/webui`.
  * @param {string} dir
  */
-export function writeWebRoot(dir) {
-  const root = join(dir, 'webui');
-  mkdirSync(root, { recursive: true });
-  writeFileSync(
-    join(root, 'index.html'),
-    '<!doctype html>\n<html><head><link rel="stylesheet" href="/style.css"></head><body><div id="app"></div><script type="module" src="/app.js"></script></body></html>\n',
-  );
-  writeFileSync(join(root, 'app.js'), 'export const answer = 42;\n');
-  writeFileSync(join(root, 'style.css'), 'body { color: #222; }\n');
-  return root;
-}
-
 /**
  * Start a manager API against a fake manager.
  * @param {import('node:test').TestContext} t
- * @param {{ webRoot?: string, manager?: any, withWebRoot?: boolean }} [options]
+ * @param {{ manager?: any }} [options]
  */
 export async function setupApi(t, options = {}) {
   const { createManagerApi } = await import('../../src/manager/api.js');
   const dir = tempDir('manager-api');
-  const webRoot = options.webRoot ?? writeWebRoot(dir);
   const manager = options.manager ?? createFakeManager();
-  const api = createManagerApi({ manager, webRoot, logger: silentLogger() });
+  const api = createManagerApi({ manager, logger: silentLogger() });
   const listen = await api.start({ host: '127.0.0.1', port: 0 });
   t.after(async () => {
     await api.stop().catch(() => {});
     removeDir(dir);
   });
-  return { dir, webRoot, manager, api, listen, base: `http://127.0.0.1:${listen.port}` };
+  return { dir, manager, api, listen, base: `http://127.0.0.1:${listen.port}` };
 }
 
 /**

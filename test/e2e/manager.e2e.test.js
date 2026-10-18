@@ -1,6 +1,6 @@
 /**
  * End-to-end: real manager + two real gateway instances (different workspaces,
- * different channel bindings) + the real manager HTTP API and static UI.
+ * different channel bindings) + the real manager HTTP API.
  *
  * The DSH runtime at the edge is the fake runtime child process, so this test
  * needs no model credentials and no IM platform network.
@@ -72,7 +72,7 @@ async function waitFor(check, { timeoutMs = 15000, description = 'condition' } =
   }
 }
 
-test('manager e2e: two workspaces, different channels, state API + pairing + static UI', async (t) => {
+test('manager e2e: two workspaces, different channels, state API + pairing', async (t) => {
   const runDir = createRunDir('manager-e2e');
   const managerDataDir = join(runDir.dir, 'manager-data');
   const managerFile = join(runDir.dir, 'manager.json');
@@ -156,12 +156,11 @@ test('manager e2e: two workspaces, different channels, state API + pairing + sta
   const reloaded = createPairingStore({ file: join(workspaceA.stateDir, 'pairing.json') });
   assert.equal(reloaded.isApproved('feishu', 'ou_owner'), true);
 
-  // Static UI is served by the same process.
-  const indexResponse = await fetch(`http://127.0.0.1:${listen.port}/`);
-  assert.equal(indexResponse.status, 200);
-  assert.match(indexResponse.headers.get('content-type') ?? '', /text\/html/);
-  const html = await indexResponse.text();
-  assert.match(html, /id="app"/);
+  // The HTTP API root describes the service (UI lives in the DSH sidebar).
+  const rootResponse = await fetch(`http://127.0.0.1:${listen.port}/`);
+  assert.equal(rootResponse.status, 200);
+  const root = await rootResponse.json();
+  assert.equal(root.service, 'dsh-im-manager');
 
   await manager.stopWorkspace('ws-weixin');
   await waitFor(() => manager.getState().workspaces.find((workspace) => workspace.id === 'ws-weixin').state === 'stopped', {

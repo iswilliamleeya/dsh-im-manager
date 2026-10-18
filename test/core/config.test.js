@@ -86,7 +86,7 @@ describe('loadConfig', () => {
         assert.equal(
           resolveConfigPath({ env: { DSH_HOME: join(dir, 'home') } }),
           join(process.cwd(), '.dsh-im-manager', 'config.json'),
-          'cd <workspace> must resolve that workspace config for pair/serve',
+          'cd <workspace> must resolve that workspace config for pair/doctor',
         );
       } finally {
         process.chdir(previous);

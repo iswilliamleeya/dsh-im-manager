@@ -1,5 +1,5 @@
 /**
- * Multi-workspace manager: config store, lifecycle, HTTP API + Web UI host.
+ * Multi-workspace manager: config store, lifecycle, local HTTP API.
  *
  * Typical use (see `src/cli.js`):
  *

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Install / remove the dsh-im-manager host plugin in a DSH profile.
 #
-# The gateway itself also runs standalone (`node bin/dsh-im-manager.js serve`);
-# this script is only for the optional "run inside the DSH host process and
-# expose im_gateway_* tools" mode.
+# This script installs the DSH profile bundle without pnpm: it copies the
+# package into the profile and appends the host-plugin patch row. Standalone
+# `serve` / CLI `manager` / Web UI entry points have been removed.
 #
 # Usage:
-#   bash install/activate.sh              # manager mode (default): embed manager + Web UI in DSH
+#   bash install/activate.sh              # manager mode (default): embed manager + native DSH page
 #   DSH_PROFILE=web bash install/activate.sh
 #   bash install/activate.sh --gateway    # legacy single-gateway mode
 #   bash install/activate.sh --remove     # remove the patch row (package left in place)
@@ -16,7 +16,7 @@
 #      (including node_modules, so the channel SDKs resolve from the package itself)
 #   2. appends an `im-manager` insert row to the profile patch layer, with a
 #      timestamped backup and a duplicate guard. Default row uses `mode: manager`
-#      (multi-workspace manager + Web UI started with the DSH host; if a manager
+#      (multi-workspace manager started with the DSH host; if a manager
 #      already holds `manager.lock`, the plugin attaches instead of duplicating).
 #   3. prints how to verify and how to undo
 #
@@ -151,6 +151,6 @@ if [ "$MODE" = "gateway" ]; then
 else
   say "Mode: manager (multi-workspace)"
   say "Manager: ~/.dsh/im-manager/manager.json"
-  say "Web UI:  http://127.0.0.1:$MANAGER_PORT/  (started with the DSH host, or attached to a running manager)"
+  say "manager API: http://127.0.0.1:$MANAGER_PORT/  (attach/health; UI 在 DSH 侧栏「消息」)"
 fi
 say "Undo:  bash \"$SRC_DIR/install/activate.sh\" --remove"

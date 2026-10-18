@@ -1,25 +1,19 @@
 /** dsh-im-manager command line interface. */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   loadConfig,
-  resolveConfigPath,
   enabledChannels,
   CHANNEL_IDS,
 } from './core/config.js';
-import { createLogger } from './core/logger.js';
 import { createPairingStore } from './core/pairing.js';
 import { resolveDshCommand } from './core/dsh-command.js';
 import { loadAdapterModule } from './adapters/registry.js';
-import { writeJsonAtomic, ensureDir } from './core/fs-util.js';
-import { acquireManagerLock, releaseManagerLock, readManagerLock, isPidAlive } from './host/manager-lock.js';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const EXAMPLE_CONFIG = join(PACKAGE_ROOT, 'config', 'config.example.json');
 
 /** @param {string} message */
 function print(message = '') {
@@ -76,19 +70,15 @@ function parseArgs(argv) {
 const USAGE = `dsh-im-manager — IM manager for DeepSeek Harness
 
 用法：
-  dsh-im-manager serve [--config <path>]        启动网关（常驻）
   dsh-im-manager doctor [--config <path>]       体检：配置 / dsh 运行时 / 渠道依赖 / 端口
   dsh-im-manager status [--config <path>]       查看运行状态（读 stateDir/gateway.json）
   dsh-im-manager channels [--config <path>]     列出已启用的渠道
   dsh-im-manager sessions [--config <path>]     列出当前工作区的 IM 会话映射（微信/飞书等 → DSH sessionId）
-  dsh-im-manager manager [--config <manager.json>] [--host 127.0.0.1] [--port 8788]
-                                                多工作区管理 + Web UI（默认 http://127.0.0.1:8788）
   dsh-im-manager weixin login|status|logout     个人微信扫码登录 / 查看 / 退出（login --qr <png> 保存二维码图片）
   dsh-im-manager pair <code>                    批准一个 DM 配对码
   dsh-im-manager allow <channel>:<senderId>     直接加入允许列表
   dsh-im-manager revoke <channel>:<senderId>    移出允许列表
   dsh-im-manager list                           查看允许/待配对列表
-  dsh-im-manager init [--local] [--config <path>]  写入示例配置（--local = 工作区内 .dsh-im-manager/config.json）
   dsh-im-manager version                        版本
   dsh-im-manager help                           本帮助
 
@@ -101,7 +91,7 @@ const USAGE = `dsh-im-manager — IM manager for DeepSeek Harness
 /**
  * Load config for CLI commands. Commands that only inspect state (`doctor`,
  * `status`, `pair`, ...) tolerate an incomplete config so the operator can see
- * every problem at once; `serve` validates strictly.
+ * every problem at once; commands tolerate an incomplete config.
  * @param {{ configPath?: string, warn?: (message: string) => void, strict?: boolean }} options
  */
 function loadOrExplain(options) {
@@ -232,7 +222,7 @@ async function doctor(args) {
       const stateDir = join(config.gateway.stateDir, 'channels', 'weixin');
       const credential = loginModule.readCredential(stateDir, config.channels.weixin);
       if (credential === undefined) {
-        warn('channel.weixin', '未登录：运行 `dsh-im-manager weixin login` 扫码（serve 常驻时可随时登录）');
+        warn('channel.weixin', '未登录：运行 `dsh-im-manager weixin login` 扫码（Gateway 运行时可随时登录）');
       } else {
         ok('channel.weixin', `已登录 ${credential.ilinkBotId}`);
       }
@@ -385,92 +375,6 @@ function mutateAccess(args, spec, mode) {
   return 0;
 }
 
-/**
- * Resolve the manager file (default `~/.dsh-im-manager/manager.json`).
- * @param {{ config?: string }} args
- */
-function managerFileFor(args) {
-  if (args.config) return resolve(args.config);
-  const home = process.env.DSH_HOME ? resolve(process.env.DSH_HOME) : join(homedir(), '.dsh');
-  // Manager data defaults to ~/.dsh-im-manager (independent of DSH_HOME/profile).
-  return join(homedir(), '.dsh-im-manager', 'manager.json');
-}
-
-/**
- * `manager`: run the multi-workspace manager + Web UI until SIGINT/SIGTERM.
- * @param {{ config?: string, host?: string, port?: string }} args
- */
-async function managerCommand(args) {
-  const { createManager } = await import('./manager/manager.js');
-  const { createManagerApi } = await import('./manager/api.js');
-  const { createLogger } = await import('./core/logger.js');
-  const logger = createLogger({ level: process.env.DSH_IM_MANAGER_LOG_LEVEL ?? 'info', base: { scope: 'manager' } });
-  const managerFile = managerFileFor(args);
-  // First run: seed the manager with the current workspace when it already has a
-  // workspace-local gateway config, so the UI opens with something usable.
-  if (!existsSync(managerFile)) {
-    const cwd = process.cwd();
-    const localConfig = join(cwd, '.dsh-im-manager', 'config.json');
-    const workspaces = existsSync(localConfig)
-      ? [{
-          id: basename(cwd).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace',
-          name: basename(cwd),
-          workspaceDir: cwd,
-          configFile: localConfig,
-          autoStart: false,
-        }]
-      : [];
-    ensureDir(dirname(managerFile));
-    writeFileSync(managerFile, `${JSON.stringify({ version: 1, listen: { host: '127.0.0.1', port: 8788 }, workspaces }, null, 2)}\n`, { mode: 0o600 });
-    print(`已创建 ${managerFile}${workspaces.length > 0 ? `（已加入当前工作区 ${cwd}）` : ''}`);
-  }
-  const manager = createManager({ managerFile, logger });
-  await manager.init();
-
-  const existingLock = readManagerLock(managerFile);
-  if (existingLock !== null && isPidAlive(existingLock.pid)) {
-    print(`manager 已在运行（pid ${existingLock.pid}）：http://${existingLock.host}:${existingLock.port}/`);
-    print(`manager 配置：${managerFile}`);
-    return 0;
-  }
-
-  const api = createManagerApi({ manager, logger });
-  const host = typeof args.host === 'string' && args.host.length > 0 ? args.host : manager.listen.host;
-  const port = args.port !== undefined ? Number(args.port) : manager.listen.port;
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    printError(`✗ 端口无效：${String(args.port)}`);
-    return 1;
-  }
-  const listen = await api.start({ host, port });
-  const lock = acquireManagerLock(managerFile, { host: listen.host, port: listen.port });
-  if (!lock.acquired) {
-    await api.stop().catch(() => {});
-    await manager.stop().catch(() => {});
-    const owner = lock.existing;
-    print(`manager 已在运行（pid ${owner?.pid ?? '?'}）：http://${owner?.host ?? host}:${owner?.port ?? port}/`);
-    return 0;
-  }
-  await manager.start();
-  const url = `http://${listen.host === '0.0.0.0' ? '127.0.0.1' : listen.host}:${listen.port}/`;
-  print(`dsh-im-manager manager 已启动（pid ${process.pid}）`);
-  print(`Web UI：${url}`);
-  print(`manager 配置：${managerFile}`);
-  print('Ctrl+C 停止（会停止所有工作区）。');
-  await new Promise((resolvePromise) => {
-    const stop = () => resolvePromise(undefined);
-    process.once('SIGINT', stop);
-    process.once('SIGTERM', stop);
-  });
-  await api.stop().catch(() => {});
-  await manager.stop();
-  releaseManagerLock(lock);
-  print('manager 已停止。');
-  return 0;
-}
-
-/**
- * @param {{ config?: string, json: boolean }} args
- */
 function sessionsCommand(args) {
   const loaded = loadOrExplain({ configPath: args.config });
   if (loaded === null) return 1;
@@ -534,42 +438,6 @@ function channels(args) {
 
 /**
  * @param {{ config?: string, force: boolean }} args
- */
-function init(args) {
-  const target = args.config
-    ? resolve(args.config)
-    : args.local
-      ? join(process.cwd(), '.dsh-im-manager', 'config.json')
-      : join(process.env.DSH_HOME ? resolve(process.env.DSH_HOME) : join(homedir(), '.dsh'), 'im-manager', 'config.json');
-  if (existsSync(target) && !args.force) {
-    printError(`✗ ${target} 已存在；加 --force 覆盖`);
-    return 1;
-  }
-  if (!existsSync(EXAMPLE_CONFIG)) {
-    printError(`✗ 找不到示例配置 ${EXAMPLE_CONFIG}`);
-    return 1;
-  }
-  ensureDir(dirname(target));
-  const example = JSON.parse(readFileSync(EXAMPLE_CONFIG, 'utf8'));
-  if (args.local) {
-    // A workspace-local config should point the agent at this workspace.
-    example.dsh = { ...example.dsh, cwd: process.cwd() };
-  }
-  writeFileSync(target, `${JSON.stringify(example, null, 2)}\n`, 'utf8');
-  print(`✓ 已写入 ${target}`);
-  if (args.local) {
-    print(`工作区：${process.cwd()}`);
-    print('该配置只属于这个工作区；在本目录运行 dsh-im-manager 会自动发现它（含 pair/doctor/serve）。');
-  }
-  print('下一步：填入各渠道密钥（或使用 env:VAR），然后运行 `dsh-im-manager doctor`。');
-  return 0;
-}
-
-/**
- * `weixin login|status|logout`: personal WeChat QR login via the official
- * openclaw-weixin (iLink) protocol.
- * @param {{ config?: string }} args
- * @param {string[]} rest
  */
 async function weixinCommand(args, rest) {
   const sub = rest[0] ?? 'status';
@@ -652,7 +520,7 @@ async function weixinCommand(args, rest) {
     });
     print('');
     print(`✓ 登录成功：${result.ilinkBotId}${result.userId ? `（微信用户 ${result.userId}）` : ''}`);
-    print('凭据已写入；`dsh-im-manager serve` 常驻进程会在数秒内自动开始收发消息。');
+    print('凭据已写入；运行中的 Gateway 会在数秒内自动开始收发消息。');
     return 0;
   } catch (error) {
     printError(`✗ 登录失败：${error instanceof Error ? error.message : String(error)}`);
@@ -664,42 +532,6 @@ async function weixinCommand(args, rest) {
 
 /**
  * @param {{ config?: string }} args
- */
-async function serve(args) {
-  const configWarnings = [];
-  const loaded = loadOrExplain({ configPath: args.config, warn: (message) => configWarnings.push(message), strict: true });
-  if (loaded === null) return 1;
-  const logger = createLogger({ level: loaded.config.gateway.log.level });
-  for (const warning of configWarnings) logger.warn('config warning', { detail: warning });
-  const { createGateway } = await import('./core/gateway.js');
-  const gateway = createGateway({ config: loaded.config, logger });
-  await gateway.start();
-  const snapshot = await gateway.status();
-  logger.info('gateway ready', {
-    pid: snapshot.pid,
-    http: snapshot.http,
-    channels: Object.keys(snapshot.channels),
-    stateDir: loaded.config.gateway.stateDir,
-  });
-  print(`dsh-im-manager 已启动（pid ${snapshot.pid}）`);
-  print(`工作区：${snapshot.workspace?.cwd ?? loaded.config.dsh.cwd}${loaded.config.dsh.home ? `（DSH_HOME=${loaded.config.dsh.home}）` : ''}`);
-  if (snapshot.http !== null) print(`HTTP: ${snapshot.http.publicBaseUrl}（端口 ${snapshot.http.port}）`);
-  print(`状态目录：${loaded.config.gateway.stateDir}`);
-  print('Ctrl+C 停止。');
-  await new Promise((resolvePromise) => {
-    const stop = () => resolvePromise(undefined);
-    process.once('SIGINT', stop);
-    process.once('SIGTERM', stop);
-  });
-  await gateway.stop();
-  print('已停止。');
-  return 0;
-}
-
-/**
- * CLI entry point.
- * @param {string[]} argv
- * @returns {Promise<number>}
  */
 export async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
@@ -715,8 +547,6 @@ export async function main(argv = process.argv.slice(2)) {
   const command = args._[0];
   const rest = args._.slice(1);
   switch (command) {
-    case 'serve':
-      return await serve(args);
     case 'doctor':
       return await doctor(args);
     case 'status':
@@ -725,8 +555,6 @@ export async function main(argv = process.argv.slice(2)) {
       return channels(args);
     case 'sessions':
       return sessionsCommand(args);
-    case 'manager':
-      return await managerCommand(args);
     case 'weixin':
       return await weixinCommand(args, rest);
     case 'pair':
@@ -749,8 +577,6 @@ export async function main(argv = process.argv.slice(2)) {
       return mutateAccess(args, rest[0], 'revoke');
     case 'list':
       return listAccess(args);
-    case 'init':
-      return init(args);
     default:
       printError(`未知命令：${command}\n`);
       print(USAGE);

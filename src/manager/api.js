@@ -1,38 +1,17 @@
 /**
- * Local HTTP API + static Web UI for the multi-workspace manager.
+ * Local HTTP API for the multi-workspace manager.
  *
  * Listens on loopback only (no auth by design; see `docs/manager-contract.md`
- * §5). Every API response is JSON; errors are `{ "error": { "message": ... } }`.
- * Static files are served from `src/webui/` with path-traversal protection.
+ * §5). Every response is JSON; errors are `{ "error": { "message": ... } }`.
+ * The manager UI lives in the DSH sidebar; this surface is for attach mode,
+ * health checks, and scripted operations.
  */
-import { createReadStream, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { extname, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { sanitizeErrorMessage } from './manager.js';
 
-const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../webui/', import.meta.url));
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_LINES = 200;
-
-const MIME_TYPES = Object.freeze({
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.map': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
-});
 
 /** @param {string} message */
 class HttpError extends Error {
@@ -60,6 +39,11 @@ function sendJson(res, status, value) {
     'cache-control': 'no-store',
   });
   res.end(body);
+}
+
+/** @param {import('node:http').IncomingMessage} req */
+function methodOf(req) {
+  return (req.method ?? 'GET').toUpperCase();
 }
 
 /** @param {unknown} error */
@@ -143,7 +127,6 @@ function requireNonEmptyString(value, field) {
 /**
  * @param {{
  *   manager: ReturnType<typeof import('./manager.js').createManager>,
- *   webRoot?: string,
  *   logger?: import('../core/types.js').Logger,
  * }} options
  */
@@ -152,69 +135,12 @@ export function createManagerApi(options = /** @type {any} */ ({})) {
     throw new TypeError('createManagerApi requires a manager');
   }
   const manager = options.manager;
-  const webRoot = resolve(options.webRoot ?? DEFAULT_WEB_ROOT);
   const logger = options.logger;
 
   /** @type {import('node:http').Server | null} */
   let server = null;
   /** @type {{ host: string, port: number }} */
   let actual = { host: '127.0.0.1', port: 0 };
-
-  // ── static files ───────────────────────────────────────────────────────────
-
-  /** @param {import('node:http').IncomingMessage} req @param {import('node:http').ServerResponse} res @param {string} pathname */
-  async function serveStatic(req, res, pathname) {
-    const method = (req.method ?? 'GET').toUpperCase();
-    if (method !== 'GET' && method !== 'HEAD') {
-      throw new HttpError(404, `not found: ${method} ${pathname}`);
-    }
-    let decoded;
-    try {
-      decoded = decodeURIComponent(pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
-    } catch {
-      throw new HttpError(400, 'invalid URL encoding');
-    }
-    if (decoded.includes('\0')) throw new HttpError(404, `not found: ${pathname}`);
-    const target = resolve(webRoot, decoded);
-    if (target !== webRoot && !target.startsWith(`${webRoot}${sep}`)) {
-      throw new HttpError(404, `not found: ${pathname}`);
-    }
-    let stat;
-    try {
-      stat = statSync(target);
-    } catch {
-      throw new HttpError(404, `not found: ${pathname}`);
-    }
-    if (!stat.isFile()) throw new HttpError(404, `not found: ${pathname}`);
-    // Reject symlinks that escape the web root.
-    try {
-      const realTarget = realpathSync(target);
-      const realRoot = realpathSync(webRoot);
-      if (realTarget !== realRoot && !realTarget.startsWith(`${realRoot}${sep}`)) {
-        throw new HttpError(404, `not found: ${pathname}`);
-      }
-    } catch (error) {
-      if (error instanceof HttpError) throw error;
-      throw new HttpError(404, `not found: ${pathname}`);
-    }
-    const headers = {
-      'content-type': MIME_TYPES[extname(target).toLowerCase()] ?? 'application/octet-stream',
-      'content-length': String(stat.size),
-      'cache-control': 'no-cache',
-    };
-    if (method === 'HEAD') {
-      res.writeHead(200, headers);
-      res.end();
-      return;
-    }
-    await new Promise((resolvePromise, reject) => {
-      const stream = createReadStream(target);
-      stream.once('error', reject);
-      res.once('finish', resolvePromise);
-      res.writeHead(200, headers);
-      stream.pipe(res);
-    });
-  }
 
   // ── API routes ─────────────────────────────────────────────────────────────
 
@@ -307,7 +233,7 @@ export function createManagerApi(options = /** @type {any} */ ({})) {
       if (method === 'GET' && action === 'pairing') {
         const pending = manager.listPairing(id);
         // `pending` is the shape the e2e contract exercises; `pendingPairings`
-        // mirrors the key used inside `/api/state` so the Web UI can consume
+        // mirrors the key used inside `/api/state` so the DSH page/manager API can consume
         // either list shape without a special case.
         sendJson(res, 200, { pending, pendingPairings: pending });
         return;
@@ -409,8 +335,15 @@ export function createManagerApi(options = /** @type {any} */ ({})) {
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
       if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
         await handleApi(req, res, url);
+      } else if (url.pathname === '/') {
+        sendJson(res, 200, {
+          ok: true,
+          service: 'dsh-im-manager',
+          ui: 'DSH sidebar: 消息',
+          health: '/api/health',
+        });
       } else {
-        await serveStatic(req, res, url.pathname);
+        throw new HttpError(404, `not found: ${methodOf(req)} ${url.pathname}`);
       }
     } catch (error) {
       const status = statusForError(error);

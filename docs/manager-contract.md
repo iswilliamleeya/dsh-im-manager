@@ -1,14 +1,16 @@
-# Manager + Web UI 契约（v1, frozen）
+# Manager 契约（v1, frozen）
 
-目标：一个 manager 进程管理多个**工作区**，每个工作区独立绑定不同的 IM channel，并提供一个本地
-Web UI 做增删改查、启停、看状态、批准配对。工作区模型不变：**一个工作区 = 一个 gateway 实例 =
-一个 DSH SDK runtime = 一套渠道账号**。
+目标：一个 manager 管理多个**工作区**，每个工作区独立绑定不同的 IM channel。管理界面是 DSH 侧栏
+「消息」（同源 RPC `/im-manager`）；manager 的本机 HTTP API 仅用于 attach/健康检查。
+工作区模型不变：**一个工作区 = 一个 gateway 实例 = 一个 DSH SDK runtime = 一套渠道账号**。
 
 ```
-浏览器 ──HTTP──▶ manager (127.0.0.1:8788)
-                   ├── workspace A (gateway → dsh runtime, channels: feishu)
-                   ├── workspace B (gateway → dsh runtime, channels: dingtalk)
-                   └── workspace C (gateway → dsh runtime, channels: weixin)
+DSH「消息」 ──同源 RPC──▶ manager (host)
+                            ├── workspace A (gateway → dsh runtime, channels: feishu)
+                            ├── workspace B (gateway → dsh runtime, channels: dingtalk)
+                            └── workspace C (gateway → dsh runtime, channels: weixin)
+
+attach 模式：host plugin ──HTTP 127.0.0.1:8788──▶ 已有 manager
 ```
 
 ## 1. 文件与目录
@@ -113,7 +115,7 @@ createManager({ managerFile?, managerDataDir?, logger?, gatewayFactory?, now? })
 
 - 监听 `manager.listen`（默认 127.0.0.1:8788；只允许本机，不做公网认证）。
 - 全部 JSON；请求体上限 2 MiB；响应错误 `{ "error": { "message": "..." } }`，4xx/5xx。
-- 静态 UI：`GET /`、`GET /app.js`、`GET /style.css` 从 `src/webui/` 读；路径穿越拒绝。
+- `GET /` 返回服务信息；不再提供静态 UI。
 - 端点：
 
 | 方法 | 路径 | 说明 |
@@ -130,55 +132,49 @@ createManager({ managerFile?, managerDataDir?, logger?, gatewayFactory?, now? })
 | GET | `/api/workspaces/:id/pairing` | 待配对列表 |
 | POST | `/api/workspaces/:id/pairing/approve` | `{code}` 批准 |
 | GET | `/api/workspaces/:id/logs?lines=200` | 最近日志 |
-| GET | `/api/health` | `{ok:true}`（UI 探活） |
+| GET | `/api/health` | `{ok:true}`（探活） |
 
 - `POST /api/workspaces` 的 `channels` 是渠道 id 数组（`feishu|dingtalk|wecom|weixin`）；
   创建后对应 `channels.<id>.enabled=true`，其余关闭。
 - `PUT config` 用 `validate()` + 各 adapter 的 `validateConfig()` 校验；失败返回 400 且不写盘。
 - 所有写操作串行化（manager 内部互斥），避免并发保存/启动竞争。
 
-## 6. Web UI（`src/webui/`）
+## 6. DSH 原生页面（`lib/client.js`）
 
-无构建步骤的静态三件套：`index.html` + `app.js` + `style.css`（ES module、原生 fetch）。
+- 侧栏入口 `消息`（`sidebar.panellist` + `main`），原生 React，不嵌入 iframe；
+- host 注册 `/im-manager` RPC，`connection.admit` owner 门禁；owned 模式直接调 manager，
+  attach 模式走 manager HTTP adapter；
+- 端点：`discover`、`state`、`workspace.{add,adopt,update,start,stop,restart,remove}`、
+  `config.{get,save}`、`pairing.{list,approve,allow}`、`connect.{begin,get,cancel}`、`logs`、
+  `message.send`、`activity`；
+- `discover` 返回 `{ workspaces: [{ workspaceId, title, path, managerId, gateway }], unlinked }`；
+- 页面轮询 `discover` 与 `activity`，并调用 DSH client 的 `sessions.refresh()` 同步会话列表。
 
-- 左侧工作区列表：名称、状态点（running/stopped/error）、渠道 chips、添加工作区按钮。
-- 右侧详情：
-  - 头部：名称、workspaceDir、configFile、开始/停止/重启按钮；
-  - 渠道卡片：4 个渠道的启用开关 + 关键字段（`appId/appSecret/...`，密钥输入框 type=password，
-    已有值显示 `***` 占位，不回显明文）；保存按钮；
-  - 配对面板：待配对码 + 批准按钮；
-  - 日志面板：最近 200 行，刷新按钮；
-  - 微信状态：未登录提示（v1 登录仍用 CLI `weixin login`，UI 只展示状态）。
-- 轮询 `/api/state` 每 2s；操作后立即刷新；错误在页面顶部 toast。
-- 不引入前端框架、不做登录认证（监听 127.0.0.1；如需远程，用户自行反代 + 鉴权）。
-
-## 7. CLI
+## 7. CLI（仅诊断）
 
 ```bash
-dsh-im-manager manager [--config <manager.json>] [--port 8788] [--no-open]
+dsh-im-manager doctor|status|channels|sessions|list|pair|allow|revoke|weixin|version
 ```
 
-- 启动 manager（前台常驻），打印 Web UI URL；SIGINT/SIGTERM 停止全部工作区并退出。
-- `--no-open` 默认行为就是只打印 URL，不拉起浏览器。
-- `manager init [--config]` 可选：写一个含当前工作区的 manager.json；v1 可省略。
+- `serve` / `manager` / `init` 已移除；运行入口只有 DSH profile bundle。
+- `weixin login|status|logout` 仍用于个人微信扫码/凭据检查。
 
 ## 8. 测试约定
 
 - `test/manager/*.test.js`（manager-dev）：config store CRUD/脱敏/0600、生命周期（fake gateway）、
   start/stop 幂等、单工作区失败隔离、配对审批、日志环形缓冲。
-- `test/webui/*.test.js`（webui-dev）：静态路由 + 404/穿越拒绝、API 客户端纯函数（可选）。
+- `test/host/client-bundle.test.js`：客户端 bundle 注册、RPC 端点、无 iframe/固定端口。
 - Lead：manager e2e（真实 gateway + fake DSH runtime 两工作区）与 CLI smoke；更新 README/verification。
 - 所有测试用 `node:test`，不新增 npm 依赖。
 
 ## 9. v1 不做
 
-- UI 内微信扫码登录（仍用 CLI；后续可加 QR API）
-- Web UI 鉴权/TLS（只监听 loopback）
 - 多用户/权限系统
-- 把 manager 嵌进 DSH Desktop 的 client plugin（独立网页；后续可做）
-- 同一渠道账号在多个工作区并发绑定（会互相抢占长连接；UI 只展示/保存配置，不做账号占用锁）
+- manager HTTP API 的鉴权/TLS（只监听 loopback）
+- 同一渠道账号在多个工作区并发绑定（会互相抢占长连接；页面只展示/保存配置，不做账号占用锁）
+- 操作系统级进程隔离（每个工作区仍是同宿主内独立 gateway + SDK runtime 子进程）
 
-## 10. 渠道扫码连接（v1.1，UI 弹窗）
+## 10. 渠道扫码连接（原生页面弹窗）
 
 除 `dingtalk` / `wecom`（直接保存配置并启用）外，`weixin` 与 `feishu` 支持在 UI 里扫码连接。
 **规则：扫码弹窗在确认前关闭 = 该渠道不启用。** 只有扫码确认成功才写 `enabled:true`。
