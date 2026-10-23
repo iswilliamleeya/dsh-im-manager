@@ -68,7 +68,7 @@ bash install/verify-plugin.sh
 ## 7. 手动冒烟
 
 ```bash
-node bin/dsh-im-manager.js version           # 0.2.0，exit 0
+node bin/dsh-im-manager.js version           # 0.2.1，exit 0
 node bin/dsh-im-manager.js help              # 打印诊断命令，exit 0
 node bin/dsh-im-manager.js doctor --config config/config.example.json
 node bin/dsh-im-manager.js weixin status --config config/config.example.json

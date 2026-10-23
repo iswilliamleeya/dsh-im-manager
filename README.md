@@ -53,7 +53,7 @@ dsh plugin --profile desktop add github:iswilliamleeya/dsh-im-manager
 
 # 本地 checkout / release tarball
 dsh plugin --profile desktop add /absolute/path/to/dsh-im-manager
-dsh plugin --profile desktop add ./dsh-im-manager-0.2.0.tgz
+dsh plugin --profile desktop add ./dsh-im-manager-0.2.1.tgz
 ```
 
 - 包声明 `dsh.bundle`，安装后自动挂载 host 插件（manager 模式）和「消息」侧栏页面；
