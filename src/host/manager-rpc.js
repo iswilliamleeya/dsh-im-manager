@@ -36,6 +36,12 @@ export function createManagerRpcHandler(manager, options = {}) {
     }
     return payload.id;
   };
+  const requireUpdate = () => {
+    if (options.update === null || typeof options.update !== 'object') {
+      throw Object.assign(new Error('version update is unavailable in this host build'), { code: 'UPDATE_UNAVAILABLE' });
+    }
+    return options.update;
+  };
 
   /**
    * @param {string} endpoint
@@ -186,6 +192,21 @@ export function createManagerRpcHandler(manager, options = {}) {
             ...(typeof payload.replyToMessageId === 'string' ? { replyToMessageId: payload.replyToMessageId } : {}),
           },
         }));
+      }
+
+      case 'update.state': {
+        const update = requireUpdate();
+        return ok(await update.getState());
+      }
+
+      case 'update.check': {
+        const update = requireUpdate();
+        return ok(await update.check({}));
+      }
+
+      case 'update.install': {
+        const update = requireUpdate();
+        return ok(await update.install({}));
       }
 
       default:

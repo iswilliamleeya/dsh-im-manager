@@ -22,6 +22,8 @@
 - **访问控制**：私聊 pairing、allowlist、群聊 @ 门禁
 - **入站媒体**：图片/文件下载；图片可直接给视觉模型，文件落到工作区并给 Agent 路径
 - **每个工作区独立**：独立配置、stateDir、HTTP 端口、DSH runtime、会话
+- **版本更新**：列表页「检查更新」比对 GitHub 最新 tag，有新版自动安装；检查只走
+  `tags.atom` → `git ls-remote` → `releases.atom`（无需 GitHub token），装完提示刷新/重启
 
 ![工作区详情](docs/assets/discovery-detail.png)
 
@@ -48,12 +50,12 @@ DSH 宿主（desktop profile）
 要求：Node.js >= 22.19、DSH Desktop / Web **0.2.1-rc.2 及以上**（`peerDependencies: ^0.2.1-rc.2`）。
 
 ```bash
-# 从 GitHub 安装到 desktop profile（推荐；可加 #v0.2.2 锁版本）
+# 从 GitHub 安装到 desktop profile（推荐；可加 #v0.2.3 锁版本）
 dsh plugin --profile desktop add github:iswilliamleeya/dsh-im-manager
 
 # 本地 checkout / release tarball
 dsh plugin --profile desktop add /absolute/path/to/dsh-im-manager
-dsh plugin --profile desktop add ./dsh-im-manager-0.2.2.tgz
+dsh plugin --profile desktop add ./dsh-im-manager-0.2.3.tgz
 ```
 
 - 包声明 `dsh.bundle`，安装后会自动写进 profile 的 `dsh.profile.bundles`，**因此显式出现在
@@ -62,7 +64,8 @@ dsh plugin --profile desktop add ./dsh-im-manager-0.2.2.tgz
   按插件页提示允许构建并重试；
 - 开发/离线安装：`bash install/activate.sh`（不经过 pnpm），`bash install/activate.sh --remove` 卸载。
 
-安装/更新客户端半边后需要**重启 DSH**。
+安装/更新客户端半边后需要**重启 DSH**。装好后可在「消息」列表页点「检查更新」自动升级到
+GitHub 最新 tag；也可以继续用 `dsh plugin add` 手动升级。
 
 ## 快速开始
 
@@ -94,6 +97,7 @@ dsh plugin --profile desktop add ./dsh-im-manager-0.2.2.tgz
 | 工作区配置 | `<workspace>/.dsh-im-manager/config.json` |
 | 工作区状态/凭据 | `<managerDataDir>/workspaces/<id>/state` |
 | 个人微信登录态 | `<stateDir>/channels/weixin/credentials.json`（0600） |
+| 版本更新状态 | `~/.dsh/im-manager-update.json`（0600，`$DSH_HOME` 下） |
 
 ## 安全
 
@@ -126,7 +130,7 @@ dsh-im-manager weixin login|status|logout  # 个人微信扫码登录 / 查看 /
 
 ```bash
 npm install
-npm test                 # 625 tests / 48 suites
+npm test                 # 665 tests / 48 suites
 npm pack                 # 生成 dsh-im-manager-<version>.tgz
 
 bash install/verify-plugin.sh   # 隔离 DSH_HOME 验证 host plugin 加载/释放
@@ -152,6 +156,10 @@ bash install/verify-plugin.sh   # 隔离 DSH_HOME 验证 host plugin 加载/释�
 - [docs/channels/index.md](docs/channels/index.md)：四渠道总览
 - [docs/verification.md](docs/verification.md)：测试与验证记录
 - [docs/manager-contract.md](docs/manager-contract.md)：manager/API 契约
+
+## 变更记录
+
+- **0.2.3**：新增「检查更新」——比对 GitHub 最新 tag（tags.atom → git ls-remote → releases.atom，无需 token），有更新自动安装，原生页面显示进度并轮询，装完提示刷新页面或重启 DSH。
 
 ## License
 

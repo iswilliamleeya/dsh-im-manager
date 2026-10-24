@@ -74,3 +74,39 @@ test('dialogs and async results expose the required a11y contract', () => {
   assert.match(source, /'aria-hidden': 'true'/, 'decorative dots must be hidden');
   assert.match(source, /tabIndex: -1/);
 });
+
+test('client update UI follows the shared version-update contract', () => {
+  for (const endpoint of ['update.state', 'update.check', 'update.install']) {
+    assert.ok(source.includes(`'${endpoint}'`), `missing update RPC endpoint ${endpoint}`);
+  }
+  for (const copy of [
+    '检查更新',
+    '检查中…',
+    '安装中…',
+    '已是最新版本（',
+    '发现新版本 v',
+    '，正在自动下载安装…',
+    '已更新到 v',
+    '，刷新页面后生效',
+    '已安装 v',
+    '，重启 DSH 后生效',
+    '刷新页面',
+    '关闭',
+  ]) {
+    assert.ok(source.includes(copy), `missing update copy: ${copy}`);
+  }
+  assert.match(source, /window\.location\.reload\(\)/, 'installed states need a 刷新页面 button');
+  assert.match(source, /· 当前版本 v/, 'the intro must append the current version');
+  assert.match(source, /1500/, 'installing state must poll every 1.5s');
+  assert.equal(source.includes('api.github.com'), false);
+
+  // Toolbar order: 刷新 | 检查更新 | 添加外部工作区.
+  const refresh = source.indexOf("'刷新'");
+  const check = source.indexOf("'检查更新'");
+  const add = source.indexOf("'添加外部工作区'");
+  assert.ok(refresh >= 0 && check > refresh && add > check, 'toolbar order must be 刷新 | 检查更新 | 添加外部工作区');
+
+  // The update notice renders after the banner in both the list and detail views.
+  const placements = source.match(/banner,\n\s+updateBar,/g) ?? [];
+  assert.equal(placements.length, 2, 'update notice must render below the banner in list and detail');
+});

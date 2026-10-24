@@ -15,6 +15,7 @@ import { prepareGateway } from './index.js';
 import { defaultManagerFile, isSdkRuntime, startEmbeddedManager } from './host/embedded-manager.js';
 import { createHttpManagerAdapter, createManagerHttpClient, formatManagerStatus, pickWorkspace } from './host/manager-client.js';
 import { createManagerRpcHandler } from './host/manager-rpc.js';
+import { createUpdateService } from './host/update.js';
 import { attachSessionsToWorkspaces, backfillWorkspaceSessions } from './host/workspace-attach.js';
 import { mergeDiscoveredWorkspaces } from './host/discovery.js';
 
@@ -320,6 +321,18 @@ async function applyManager(ctx, config) {
   const log = hostLogger(ctx);
   const managerFile = config.managerFile.length > 0 ? config.managerFile : defaultManagerFile();
 
+  // Version updater. Created outside `ensureManager()` so `update.state` works
+  // in embedded and attach modes (and even before the manager is ready); the
+  // official plugin-manager service is resolved lazily at install time because
+  // `ctx.get('pluginManager')` is still undefined while `apply` runs.
+  const update = createUpdateService({ ctx });
+  // `update.*` endpoints do not depend on the manager at all: they must keep
+  // working in embedded and attach modes (and before the manager is ready), so
+  // they are dispatched without going through `ensureManager()`.
+  const updateRpc = createManagerRpcHandler({}, { update });
+  /** @param {string} endpoint */
+  const isUpdateEndpoint = (endpoint) => endpoint === 'update.state' || endpoint === 'update.check' || endpoint === 'update.install';
+
   /** @type {Awaited<ReturnType<typeof startEmbeddedManager>> | null} */
   let embedded = null;
   /** @type {ReturnType<typeof createManagerHttpClient> | null} */
@@ -449,31 +462,35 @@ async function applyManager(ctx, config) {
           }
           let result;
           try {
-            await ensureManager();
-            const target = embedded !== null && embedded.manager !== null
-              ? embedded.manager
-              : createHttpManagerAdapter(embedded !== null ? embedded.baseUrl : 'http://127.0.0.1:8788');
-            result = await createManagerRpcHandler(target, {
-              discover: async () => {
-                const state = await target.getState();
-                let entities = [];
-                if (workspaceRegistry !== null) {
-                  try {
-                    entities = workspaceRegistry.list();
-                  } catch {
-                    entities = [];
+            if (isUpdateEndpoint(endpoint)) {
+              result = await updateRpc(endpoint, envelope.payload ?? {}, req.signal, admission.peer);
+            } else {
+              await ensureManager();
+              const target = embedded !== null && embedded.manager !== null
+                ? embedded.manager
+                : createHttpManagerAdapter(embedded !== null ? embedded.baseUrl : 'http://127.0.0.1:8788');
+              result = await createManagerRpcHandler(target, {
+                discover: async () => {
+                  const state = await target.getState();
+                  let entities = [];
+                  if (workspaceRegistry !== null) {
+                    try {
+                      entities = workspaceRegistry.list();
+                    } catch {
+                      entities = [];
+                    }
                   }
+                  return mergeDiscoveredWorkspaces(state, entities);
+                },
+              })(endpoint, envelope.payload ?? {}, req.signal, admission.peer);
+              if (endpoint === 'activity' && result?.ok === true && workspaceRegistry !== null) {
+                try {
+                  await attachSessionsToWorkspaces(result.value, workspaceRegistry, log);
+                } catch (error) {
+                  log.debug('workspace attach failed', {
+                    error: error instanceof Error ? error.message : String(error),
+                  });
                 }
-                return mergeDiscoveredWorkspaces(state, entities);
-              },
-            })(endpoint, envelope.payload ?? {}, req.signal, admission.peer);
-            if (endpoint === 'activity' && result?.ok === true && workspaceRegistry !== null) {
-              try {
-                await attachSessionsToWorkspaces(result.value, workspaceRegistry, log);
-              } catch (error) {
-                log.debug('workspace attach failed', {
-                  error: error instanceof Error ? error.message : String(error),
-                });
               }
             }
           } catch (error) {

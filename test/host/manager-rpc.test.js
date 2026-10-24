@@ -137,3 +137,71 @@ test('errors and invalid input become structured failures', async () => {
   assert.equal(forbidden.ok, false);
   assert.equal(forbidden.error.code, 'FORBIDDEN');
 });
+
+test('update endpoints return UPDATE_UNAVAILABLE when the host has no update service', async () => {
+  const { manager } = fakeManager();
+  const rpc = createManagerRpcHandler(manager);
+  for (const endpoint of ['update.state', 'update.check', 'update.install']) {
+    const result = await rpc(endpoint, {});
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, 'UPDATE_UNAVAILABLE');
+  }
+});
+
+test('update endpoints delegate to the injected service and stay owner-only', async () => {
+  const { manager } = fakeManager();
+  const calls = [];
+  const update = {
+    async getState() {
+      calls.push('state');
+      return { packageName: 'dsh-im-manager', currentVersion: '0.2.2', repo: 'o/r', autoInstall: true, state: { status: 'idle' } };
+    },
+    async check() {
+      calls.push('check');
+      return {
+        packageName: 'dsh-im-manager',
+        currentVersion: '0.2.2',
+        repo: 'o/r',
+        latestVersion: '0.2.3',
+        hasUpdate: true,
+        tag: 'v0.2.3',
+        releaseUrl: 'https://github.com/o/r/releases/tag/v0.2.3',
+        source: 'tag',
+        notes: '',
+        checkedAt: '2026-10-25T00:00:00.000Z',
+        state: { status: 'available' },
+      };
+    },
+    async install() {
+      calls.push('install');
+      return { started: true, alreadyRunning: false, state: { status: 'installing' } };
+    },
+  };
+  const rpc = createManagerRpcHandler(manager, { update });
+  const state = await rpc('update.state', { ignored: true });
+  assert.equal(state.ok, true);
+  assert.equal(state.value.autoInstall, true);
+  const checked = await rpc('update.check', {});
+  assert.equal(checked.value.hasUpdate, true);
+  assert.equal(checked.value.tag, 'v0.2.3');
+  const installed = await rpc('update.install', {});
+  assert.deepEqual(installed.value, { started: true, alreadyRunning: false, state: { status: 'installing' } });
+  assert.deepEqual(calls, ['state', 'check', 'install']);
+
+  const forbidden = await rpc('update.check', {}, undefined, { principal: { kind: 'guest' } });
+  assert.equal(forbidden.ok, false);
+  assert.equal(forbidden.error.code, 'FORBIDDEN');
+
+  const failing = createManagerRpcHandler(manager, {
+    update: {
+      async check() {
+        const error = new Error('当前没有可安装的更新');
+        error.code = 'NO_UPDATE';
+        throw error;
+      },
+    },
+  });
+  const noUpdate = await failing('update.check', {});
+  assert.equal(noUpdate.ok, false);
+  assert.equal(noUpdate.error.code, 'NO_UPDATE');
+});
