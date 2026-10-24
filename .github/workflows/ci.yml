@@ -18,4 +18,24 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm test
+      - name: Run tests
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee "$RUNNER_TEMP/test-output.txt"
+      # 失败时把「哪几条用例挂了」写成 annotation + job summary，
+      # 这样不用下载完整日志也能在 Actions 页面直接看到失败摘要。
+      - name: Report failing tests
+        if: failure()
+        shell: bash
+        run: |
+          out="$RUNNER_TEMP/test-output.txt"
+          {
+            echo "### 失败摘要（node ${{ matrix.node }}）"
+            echo '```'
+            grep -nE '^not ok |^# fail |AssertionError|^Error:|^ERR_' "$out" | head -40 || tail -60 "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^not ok |AssertionError|^Error: ' "$out" | head -20 | while IFS= read -r line; do
+            echo "::error title=test failure::$line"
+          done
