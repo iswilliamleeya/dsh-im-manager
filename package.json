@@ -1,6 +1,6 @@
 {
   "name": "dsh-im-manager",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "IM channels for DeepSeek Harness: multi-workspace Feishu / DingTalk / WeCom / personal WeChat gateways driving isolated DSH SDK runtimes",
   "type": "module",
@@ -74,6 +74,6 @@
     "LICENSE"
   ],
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.2"
   }
 }

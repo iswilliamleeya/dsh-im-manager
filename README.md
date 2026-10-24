@@ -45,19 +45,19 @@ DSH 宿主（desktop profile）
 
 ## 安装
 
-要求：Node.js >= 22.19、可用的 DSH Desktop / Web。
+要求：Node.js >= 22.19、DSH Desktop / Web **0.2.1-rc.2 及以上**（`peerDependencies: ^0.2.1-rc.2`）。
 
 ```bash
-# 从 GitHub 安装到 desktop profile（推荐）
+# 从 GitHub 安装到 desktop profile（推荐；可加 #v0.2.2 锁版本）
 dsh plugin --profile desktop add github:iswilliamleeya/dsh-im-manager
 
 # 本地 checkout / release tarball
 dsh plugin --profile desktop add /absolute/path/to/dsh-im-manager
-dsh plugin --profile desktop add ./dsh-im-manager-0.2.1.tgz
+dsh plugin --profile desktop add ./dsh-im-manager-0.2.2.tgz
 ```
 
-- 包声明 `dsh.bundle`，安装后自动挂载 host 插件（manager 模式）和「消息」侧栏页面；
-- 安装完成后在 DSH「插件 → 已安装插件」可见，可启停/卸载；
+- 包声明 `dsh.bundle`，安装后会自动写进 profile 的 `dsh.profile.bundles`，**因此显式出现在
+  DSH「插件 → 已安装插件」列表**里，可启停/卸载；同时挂载 host 插件（manager 模式）和「消息」侧栏页面；
 - 首次安装若 pnpm 提示 `protobufjs` 构建脚本被忽略（飞书 SDK 的传递依赖），
   按插件页提示允许构建并重试；
 - 开发/离线安装：`bash install/activate.sh`（不经过 pnpm），`bash install/activate.sh --remove` 卸载。
